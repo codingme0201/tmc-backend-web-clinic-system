@@ -13,6 +13,7 @@ use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\PrescriptionController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\StaffController;
+use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
@@ -141,6 +142,15 @@ Route::middleware('auth:sanctum')->group(function () {
     // Dashboard insights (activity bars + peak hours)
     Route::get('/insights/activity', [ClinicInsightsController::class, 'activity'])->middleware('permission:dashboard.view');
     Route::get('/insights/peak-hours', [ClinicInsightsController::class, 'peakHours'])->middleware('permission:dashboard.view');
+
+    // User Management
+    Route::get('/users', [UserController::class, 'index'])->middleware('permission:users.view');
+    Route::get('/users/{user}', [UserController::class, 'show'])->middleware('permission:users.view');
+    Route::post('/users', [UserController::class, 'store'])->middleware('permission:users.create');
+    Route::put('/users/{user}', [UserController::class, 'update'])->middleware('permission:users.update');
+    Route::patch('/users/{user}/status', [UserController::class, 'updateStatus'])->middleware('permission:users.update');
+    Route::patch('/users/{user}/role', [UserController::class, 'updateRole'])->middleware('permission:users.update');
+    Route::post('/users/{user}/reset-password', [UserController::class, 'resetPassword'])->middleware('permission:users.update');
 
     // Activity / audit log
     Route::get('/activity-logs', [ActivityLogController::class, 'index'])->middleware('permission:audit_logs.view');

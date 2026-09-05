@@ -36,6 +36,10 @@ class AuthController extends Controller
             return response()->json(['message' => 'Invalid email or password.'], 401);
         }
 
+        if (isset($user->status) && $user->status !== 'active') {
+            return response()->json(['message' => 'This account has been deactivated. Please contact an administrator.'], 403);
+        }
+
         $token = $user->createToken('tmc-carelink')->plainTextToken;
 
         return response()->json([
