@@ -8,15 +8,18 @@ use Illuminate\Http\Resources\Json\JsonResource;
 class PatientResource extends JsonResource
 {
     /**
-     * Transform the patient into the shape the frontend registry consumes
-     * (camelCase keys; `id` is the human-readable registry id).
+     * Transform the patient into the shape the frontend consumes.
+     *
+     * `id` is the auto-increment database key (used for API routing).
+     * `patientId` is the human-readable registry id (e.g. "2023-0104").
      *
      * @return array<string, mixed>
      */
     public function toArray(Request $request): array
     {
         return [
-            'id' => $this->patient_id,
+            'id' => $this->id,
+            'patientId' => $this->patient_id,
             'name' => $this->name,
             'type' => $this->type,
             'courseDept' => $this->course_dept,
@@ -25,6 +28,10 @@ class PatientResource extends JsonResource
             'allergies' => $this->allergies,
             'history' => $this->history,
             'status' => $this->status,
+            'appointmentsCount' => $this->whenCounted('appointments'),
+            'consultationsCount' => $this->whenCounted('consultations'),
+            'medicalCertificatesCount' => $this->whenCounted('medicalCertificates'),
+            'prescriptionsCount' => $this->whenCounted('prescriptions'),
         ];
     }
 }

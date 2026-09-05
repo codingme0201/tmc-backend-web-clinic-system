@@ -90,6 +90,10 @@ Route::middleware('auth:sanctum')->group(function () {
     // Patients registry
     Route::get('/patients', [PatientController::class, 'index'])->middleware('permission:patients.view');
     Route::post('/patients', [PatientController::class, 'store'])->middleware('permission:patients.create');
+    Route::get('/patients/{patient}', [PatientController::class, 'show'])->middleware('permission:patients.view');
+    Route::get('/patients/{patient}/medical-information', [PatientController::class, 'medicalInformation'])->middleware('permission:patients.view');
+    Route::get('/patients/{patient}/record-history', [PatientController::class, 'recordHistory'])->middleware('permission:patients.view');
+    Route::patch('/patients/{patient}/status', [PatientController::class, 'updateStatus'])->middleware('permission:patients.update');
 
     // Consultations
     Route::middleware('permission:consultations.view')->group(function () {
