@@ -3,17 +3,15 @@
 namespace Database\Seeders;
 
 use App\Models\MedicalRecord;
+use App\Models\User;
 use Illuminate\Database\Seeder;
 
 class MedicalRecordsSeeder extends Seeder
 {
-    /**
-     * Seed patient medical records with their clinical child sections.
-     * Idempotent — keyed by patient_id; children are recreated only when
-     * the parent record was just created.
-     */
     public function run(): void
     {
+        $prescribers = User::pluck('id', 'name');
+
         $records = [
             [
                 'patient_id' => '2023-0104', 'name' => 'Angela Reyes', 'age' => 20, 'sex' => 'Female',
@@ -161,7 +159,6 @@ class MedicalRecordsSeeder extends Seeder
                 collect($record)->except(['histories', 'conditions', 'allergies', 'medications'])->all(),
             );
 
-            // Only seed children once (i.e. when the parent was just created).
             if ($created->wasRecentlyCreated) {
                 foreach ($record['histories'] as $child) {
                     $created->histories()->create($child);
@@ -173,7 +170,11 @@ class MedicalRecordsSeeder extends Seeder
                     $created->allergies()->create($child);
                 }
                 foreach ($record['medications'] as $child) {
-                    $created->medications()->create($child);
+                    $prescriberName = $child['prescribed_by'] ?? '';
+                    $created->medications()->create([
+                        ...$child,
+                        'prescribed_by_id' => $prescribers[$prescriberName] ?? null,
+                    ]);
                 }
             }
         }

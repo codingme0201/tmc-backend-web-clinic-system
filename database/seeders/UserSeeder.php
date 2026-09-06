@@ -55,6 +55,20 @@ class UserSeeder extends Seeder
                 'role_id' => $nurseRoleId,
                 'status' => 'inactive',
             ],
+            [
+                'name' => 'Dr. S. Lopez',
+                'email' => 'slopez@tmc.edu.ph',
+                'password' => 'password',
+                'role_id' => $doctorRoleId,
+                'status' => 'active',
+            ],
+            [
+                'name' => 'Nurse J. Santos',
+                'email' => 'jsantos@tmc.edu.ph',
+                'password' => 'password',
+                'role_id' => $nurseRoleId,
+                'status' => 'active',
+            ],
         ];
 
         foreach ($users as $user) {

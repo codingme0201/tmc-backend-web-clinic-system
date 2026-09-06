@@ -28,6 +28,7 @@ class ActivityLogController extends Controller
         ]);
 
         $entry = ActivityLog::create([
+            'user_id' => $request->user()->id,
             'time' => now()->format('h:i A'),
             'user' => $request->user()->name,
             'action' => $validated['action'],

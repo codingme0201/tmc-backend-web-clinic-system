@@ -7,6 +7,7 @@ use App\Http\Requests\StoreConsultationRequest;
 use App\Http\Requests\UpdateConsultationRequest;
 use App\Http\Resources\ConsultationResource;
 use App\Models\Consultation;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -80,6 +81,9 @@ class ConsultationController extends Controller
         ];
 
         $consultation = DB::transaction(function () use ($validated, $today, $nowTime, $vitals) {
+            $staffName = $validated['staff'] ?? '';
+            $staffId = $staffName ? User::where('name', $staffName)->value('id') : null;
+
             return Consultation::create([
                 'reference' => Consultation::nextReference($today, true),
                 'date' => $today,
@@ -87,6 +91,7 @@ class ConsultationController extends Controller
                 'patient' => $validated['patient'],
                 'patient_id' => $validated['patient_id'] ?? null,
                 'appointment_id' => $validated['appointment_id'] ?? null,
+                'staff_id' => $staffId,
                 'staff' => $validated['staff'] ?? '',
                 'status' => 'Completed',
                 'chief_complaint' => $validated['chiefComplaint'] ?? $validated['symptoms'] ?? '',

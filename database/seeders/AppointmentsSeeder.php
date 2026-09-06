@@ -3,17 +3,15 @@
 namespace Database\Seeders;
 
 use App\Models\Appointment;
+use App\Models\User;
 use Illuminate\Database\Seeder;
 
 class AppointmentsSeeder extends Seeder
 {
-    /**
-     * Seed realistic clinic appointments (mirrors the dataset the frontend
-     * used as mock data, kept as demo rows so the module has data to show).
-     * Idempotent — keyed by reference.
-     */
     public function run(): void
     {
+        $staffUsers = User::pluck('id', 'name');
+
         $appointments = [
             ['reference' => 'APT-2026-001', 'patient' => 'Angela Reyes', 'patient_id' => '2023-0104', 'type' => 'Check-up', 'reason' => 'Annual physical examination required by the registrar.', 'date' => '2026-07-31', 'time' => '08:30 AM', 'staff' => 'Dr. R. Mendoza', 'status' => 'Pending', 'notes' => '', 'requested_on' => '2026-07-28'],
             ['reference' => 'APT-2026-002', 'patient' => 'Mark Dela Cruz', 'patient_id' => '2022-0941', 'type' => 'Dental concern', 'reason' => 'Persistent toothache on the upper right molar for 3 days.', 'date' => '2026-07-31', 'time' => '09:15 AM', 'staff' => 'Dr. S. Lopez', 'status' => 'Under Review', 'notes' => 'Awaiting dentist availability confirmation.', 'requested_on' => '2026-07-29'],
@@ -28,7 +26,11 @@ class AppointmentsSeeder extends Seeder
         ];
 
         foreach ($appointments as $appointment) {
-            Appointment::firstOrCreate(['reference' => $appointment['reference']], $appointment);
+            $staffId = $staffUsers[$appointment['staff']] ?? null;
+            Appointment::firstOrCreate(['reference' => $appointment['reference']], [
+                ...$appointment,
+                'staff_id' => $staffId,
+            ]);
         }
     }
 }

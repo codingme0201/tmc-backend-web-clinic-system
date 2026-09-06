@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
     'reference', 'patient', 'patient_id', 'consultation_id', 'medical_record_id',
+    'issued_by_id', 'requested_by_id', 'approved_by_id', 'rejected_by_id',
     'issued_by', 'requested_by', 'approved_by', 'approved_at', 'rejected_by',
     'rejected_at', 'rejection_reason',
     'purpose', 'diagnosis', 'recommendation', 'issue_date',
@@ -66,6 +67,26 @@ class MedicalCertificate extends Model
     public function medicalRecord(): BelongsTo
     {
         return $this->belongsTo(MedicalRecord::class, 'medical_record_id');
+    }
+
+    public function issuedByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'issued_by_id');
+    }
+
+    public function requestedByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'requested_by_id');
+    }
+
+    public function approvedByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by_id');
+    }
+
+    public function rejectedByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'rejected_by_id');
     }
 
     /**

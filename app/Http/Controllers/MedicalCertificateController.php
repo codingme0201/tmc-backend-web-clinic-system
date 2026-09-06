@@ -69,14 +69,20 @@ class MedicalCertificateController extends Controller
         $issueDate = $validated['issue_date'] ?? now()->toDateString();
 
         $certificate = DB::transaction(function () use ($request, $validated, $issueDate) {
+            $user = $request->user();
+
             return MedicalCertificate::create([
                 'reference' => MedicalCertificate::nextReference($issueDate, true),
                 'patient' => $validated['patient'],
                 'patient_id' => $validated['patient_id'] ?? null,
                 'consultation_id' => $validated['consultation_id'] ?? null,
                 'medical_record_id' => $validated['medical_record_id'] ?? null,
+                'issued_by_id' => null,
+                'requested_by_id' => $user->id,
+                'approved_by_id' => null,
+                'rejected_by_id' => null,
                 'issued_by' => $validated['issued_by'] ?? '',
-                'requested_by' => $validated['requested_by'] ?? $request->user()->name,
+                'requested_by' => $validated['requested_by'] ?? $user->name,
                 'purpose' => $validated['purpose'],
                 'diagnosis' => $validated['diagnosis'] ?? '',
                 'recommendation' => $validated['recommendation'] ?? '',
@@ -105,6 +111,7 @@ class MedicalCertificateController extends Controller
 
         $certificate->update([
             'status' => 'Approved',
+            'approved_by_id' => $request->user()->id,
             'approved_by' => $request->user()->name,
             'approved_at' => now(),
         ]);
@@ -128,6 +135,7 @@ class MedicalCertificateController extends Controller
 
         $certificate->update([
             'status' => 'Rejected',
+            'rejected_by_id' => $request->user()->id,
             'rejected_by' => $request->user()->name,
             'rejected_at' => now(),
             'rejection_reason' => $request->validated('rejection_reason') ?? '',
@@ -151,12 +159,14 @@ class MedicalCertificateController extends Controller
             ], 422);
         }
 
+        $issuedByName = $request->validated('issued_by') ?: ($certificate->issued_by ?: $request->user()->name);
+        $issuedById = \App\Models\User::where('name', $issuedByName)->value('id');
+
         $certificate->update([
             'status' => 'Issued',
             'issue_date' => $request->validated('issue_date') ?? $certificate->issue_date->format('Y-m-d'),
-            // `?:` (not `??`) so an empty-string issued_by on the request falls
-            // back to the stored value, then to the issuing user's name.
-            'issued_by' => $request->validated('issued_by') ?: ($certificate->issued_by ?: $request->user()->name),
+            'issued_by_id' => $issuedById,
+            'issued_by' => $issuedByName,
         ]);
 
         return new MedicalCertificateResource($certificate);

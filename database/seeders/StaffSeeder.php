@@ -3,13 +3,11 @@
 namespace Database\Seeders;
 
 use App\Models\Staff;
+use App\Models\User;
 use Illuminate\Database\Seeder;
 
 class StaffSeeder extends Seeder
 {
-    /**
-     * Seed today's medical staff roster. Idempotent — keyed by name.
-     */
     public function run(): void
     {
         $roster = [
@@ -20,7 +18,11 @@ class StaffSeeder extends Seeder
         ];
 
         foreach ($roster as $member) {
-            Staff::firstOrCreate(['name' => $member['name']], $member);
+            $user = User::where('name', $member['name'])->first();
+            Staff::firstOrCreate(['name' => $member['name']], [
+                ...$member,
+                'user_id' => $user?->id,
+            ]);
         }
     }
 }

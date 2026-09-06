@@ -7,6 +7,7 @@ use App\Http\Requests\StoreAppointmentRequest;
 use App\Http\Requests\UpdateAppointmentStatusRequest;
 use App\Http\Resources\AppointmentResource;
 use App\Models\Appointment;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -69,8 +70,12 @@ class AppointmentController extends Controller
         // Locked reference generation inside a transaction so concurrent
         // bookings can never produce a duplicate reference.
         $appointment = DB::transaction(function () use ($request, $validated) {
+            $staffName = $validated['staff'] ?? '';
+            $staffId = $staffName ? User::where('name', $staffName)->value('id') : null;
+
             return Appointment::create([
                 ...$request->safe(['patient', 'patient_id', 'type', 'reason', 'date', 'time', 'staff']),
+                'staff_id' => $staffId,
                 'reference' => Appointment::nextReference($validated['date'], true),
                 'status' => 'Pending',
                 'requested_on' => now()->toDateString(),

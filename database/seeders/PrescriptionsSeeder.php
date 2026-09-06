@@ -3,23 +3,17 @@
 namespace Database\Seeders;
 
 use App\Models\Consultation;
+use App\Models\MedicalRecord;
 use App\Models\Prescription;
+use App\Models\User;
 use Illuminate\Database\Seeder;
 
 class PrescriptionsSeeder extends Seeder
 {
-    /**
-     * Seed prescription records with realistic medication lines. Idempotent —
-     * keyed by reference; medication children are seeded only when the parent
-     * was just created (same pattern as MedicalRecordsSeeder).
-     *
-     * Prescriptions reuse the patient/consultation data seeded by the other
-     * seeders: each record references the matching patient by registry id and
-     * links the consultation it was written during or after where applicable.
-     */
     public function run(): void
     {
         $consultationId = fn (string $reference) => Consultation::where('reference', $reference)->value('id');
+        $staffUsers = User::pluck('id', 'name');
 
         $prescriptions = [
             [
@@ -67,7 +61,7 @@ class PrescriptionsSeeder extends Seeder
             ],
             [
                 'reference' => 'RX-2026-006', 'patient' => 'John Paul Santos', 'patient_id' => '2023-0881',
-                'consultation_id' => $consultationId('CONS-2026-013'), // written during the in-progress visit
+                'consultation_id' => $consultationId('CONS-2026-013'),
                 'prescribed_by' => 'Nurse C. Villanueva', 'prescription_date' => '2026-08-01',
                 'medications' => [
                     ['medicine_name' => 'Paracetamol', 'dosage' => '500 mg', 'frequency' => 'Every 6 hours as needed', 'duration' => '3 days', 'instructions' => 'Use for fever and body aches.'],
@@ -76,7 +70,7 @@ class PrescriptionsSeeder extends Seeder
             ],
             [
                 'reference' => 'RX-2026-007', 'patient' => 'Mark Dela Cruz', 'patient_id' => '2022-0941',
-                'consultation_id' => null, // after-visit refill, no new consultation
+                'consultation_id' => null,
                 'prescribed_by' => 'Dr. R. Mendoza', 'prescription_date' => '2026-08-03',
                 'medications' => [
                     ['medicine_name' => 'Omeprazole', 'dosage' => '20 mg', 'frequency' => 'Once daily before breakfast', 'duration' => '30 days', 'instructions' => 'Take 30 minutes before a meal.'],
@@ -96,10 +90,13 @@ class PrescriptionsSeeder extends Seeder
             $medications = $prescription['medications'];
             unset($prescription['medications']);
 
-            $created = Prescription::firstOrCreate(['reference' => $prescription['reference']], $prescription);
+            $prescriberName = $prescription['prescribed_by'] ?? '';
+            $created = Prescription::firstOrCreate(['reference' => $prescription['reference']], [
+                ...$prescription,
+                'prescribed_by_id' => $staffUsers[$prescriberName] ?? null,
+                'medical_record_id' => MedicalRecord::where('patient_id', $prescription['patient_id'])->value('id'),
+            ]);
 
-            // Only seed the medication lines once (i.e. when the parent was
-            // just created).
             if ($created->wasRecentlyCreated) {
                 foreach ($medications as $index => $medication) {
                     $created->medications()->create($medication + ['sort_order' => $index + 1]);

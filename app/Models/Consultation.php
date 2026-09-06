@@ -5,9 +5,10 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
-    'reference', 'date', 'time', 'patient', 'patient_id', 'appointment_id', 'staff', 'status',
+    'reference', 'date', 'time', 'patient', 'patient_id', 'appointment_id', 'staff_id', 'staff', 'status',
     'chief_complaint', 'vitals', 'clinical_findings', 'diagnosis', 'treatment',
     'disposition', 'started_at', 'completed_at',
 ])]
@@ -37,6 +38,21 @@ class Consultation extends Model
     public function appointment(): BelongsTo
     {
         return $this->belongsTo(Appointment::class, 'appointment_id');
+    }
+
+    public function staffUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'staff_id');
+    }
+
+    public function medicalCertificates(): HasMany
+    {
+        return $this->hasMany(MedicalCertificate::class);
+    }
+
+    public function prescriptions(): HasMany
+    {
+        return $this->hasMany(Prescription::class);
     }
 
     /**

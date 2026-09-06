@@ -16,6 +16,7 @@ class ActivityLogResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'userId' => $this->user_id,
             'time' => $this->time,
             'user' => $this->user,
             'action' => $this->action,

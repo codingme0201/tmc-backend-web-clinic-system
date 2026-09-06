@@ -20,6 +20,7 @@ class AppointmentResource extends JsonResource
             'reference' => $this->reference,
             'patient' => $this->patient,
             'patientId' => $this->patient_id,
+            'staffId' => $this->staff_id,
             'type' => $this->type,
             'reason' => $this->reason,
             'date' => $this->date->format('Y-m-d'),

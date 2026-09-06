@@ -3,15 +3,15 @@
 namespace Database\Seeders;
 
 use App\Models\Consultation;
+use App\Models\User;
 use Illuminate\Database\Seeder;
 
 class ConsultationsSeeder extends Seeder
 {
-    /**
-     * Seed clinical consultation records. Idempotent — keyed by reference.
-     */
     public function run(): void
     {
+        $staffUsers = User::pluck('id', 'name');
+
         $consultations = [
             [
                 'reference' => 'CONS-2026-010', 'date' => '2026-08-03', 'time' => '09:00 AM',
@@ -104,7 +104,11 @@ class ConsultationsSeeder extends Seeder
         ];
 
         foreach ($consultations as $consultation) {
-            Consultation::firstOrCreate(['reference' => $consultation['reference']], $consultation);
+            $staffId = $staffUsers[$consultation['staff']] ?? null;
+            Consultation::firstOrCreate(['reference' => $consultation['reference']], [
+                ...$consultation,
+                'staff_id' => $staffId,
+            ]);
         }
     }
 }

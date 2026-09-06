@@ -6,10 +6,11 @@ use Database\Factories\AppointmentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
-    'reference', 'patient', 'patient_id', 'type', 'reason', 'date', 'time',
+    'reference', 'patient', 'patient_id', 'staff_id', 'type', 'reason', 'date', 'time',
     'staff', 'status', 'notes', 'requested_on',
 ])]
 class Appointment extends Model
@@ -74,6 +75,11 @@ class Appointment extends Model
     /**
      * Consultations started from this appointment (Module 4 integration).
      */
+    public function staffUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'staff_id');
+    }
+
     public function consultations(): HasMany
     {
         return $this->hasMany(Consultation::class, 'appointment_id');

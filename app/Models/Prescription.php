@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'reference', 'patient', 'patient_id', 'consultation_id', 'medical_record_id',
-    'prescribed_by', 'prescription_date',
+    'prescribed_by_id', 'prescribed_by', 'prescription_date',
 ])]
 class Prescription extends Model
 {
@@ -51,6 +51,11 @@ class Prescription extends Model
     public function medicalRecord(): BelongsTo
     {
         return $this->belongsTo(MedicalRecord::class, 'medical_record_id');
+    }
+
+    public function prescribedByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'prescribed_by_id');
     }
 
     /**

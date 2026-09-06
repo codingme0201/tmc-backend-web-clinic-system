@@ -5,19 +5,15 @@ namespace Database\Seeders;
 use App\Models\Consultation;
 use App\Models\MedicalCertificate;
 use App\Models\MedicalRecord;
+use App\Models\User;
 use Illuminate\Database\Seeder;
 
 class MedicalCertificatesSeeder extends Seeder
 {
-    /**
-     * Seed medical certificates. Idempotent — keyed by reference.
-     *
-     * Certificates reference the existing Patients/Consultations seed data
-     * (matched by patient name / consultation reference) so the module never
-     * duplicates data and the FK relationships resolve against real rows.
-     */
     public function run(): void
     {
+        $staffUsers = User::pluck('id', 'name');
+
         $certificates = [
             [
                 'reference' => 'MC-2026-001',
@@ -96,8 +92,6 @@ class MedicalCertificatesSeeder extends Seeder
                 'issue_date' => '2026-07-28', 'valid_until' => null,
                 'status' => 'Issued',
             ],
-            // Workflow demo rows — one request per stage so the review queue
-            // (Pending), approval stage, and rejection history are visible.
             [
                 'reference' => 'MC-2026-008',
                 'patient' => 'Angela Reyes', 'patient_id' => '2023-0104',
@@ -154,6 +148,10 @@ class MedicalCertificatesSeeder extends Seeder
                     'patient_id' => $certificate['patient_id'],
                     'consultation_id' => $consultationId,
                     'medical_record_id' => $medicalRecordId,
+                    'issued_by_id' => $staffUsers[$certificate['issued_by']] ?? null,
+                    'requested_by_id' => isset($certificate['requested_by']) ? ($staffUsers[$certificate['requested_by']] ?? null) : null,
+                    'approved_by_id' => isset($certificate['approved_by']) ? ($staffUsers[$certificate['approved_by']] ?? null) : null,
+                    'rejected_by_id' => isset($certificate['rejected_by']) ? ($staffUsers[$certificate['rejected_by']] ?? null) : null,
                     'issued_by' => $certificate['issued_by'],
                     'requested_by' => $certificate['requested_by'] ?? null,
                     'approved_by' => $certificate['approved_by'] ?? null,

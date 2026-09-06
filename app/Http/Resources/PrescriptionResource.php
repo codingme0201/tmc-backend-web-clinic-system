@@ -23,6 +23,7 @@ class PrescriptionResource extends JsonResource
             'patientId' => $this->patient_id ?? '',
             'consultationId' => $this->consultation_id,
             'medicalRecordId' => $this->medical_record_id,
+            'prescribedById' => $this->prescribed_by_id,
             'prescribedBy' => $this->prescribed_by ?? '',
             'date' => $this->prescription_date->format('Y-m-d'),
             'medications' => $this->medications->map(fn ($medication) => [

@@ -7,6 +7,7 @@ use App\Http\Requests\UpdatePrescriptionRequest;
 use App\Http\Resources\PrescriptionResource;
 use App\Models\MedicalRecord;
 use App\Models\Prescription;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -86,6 +87,9 @@ class PrescriptionController extends Controller
         $date = $validated['date'] ?? now()->toDateString();
 
         $prescription = DB::transaction(function () use ($request, $validated, $date) {
+            $prescriberName = ($validated['prescribed_by'] ?? '') ?: $request->user()->name;
+            $prescriberId = User::where('name', $prescriberName)->value('id');
+
             $prescription = Prescription::create([
                 'reference' => Prescription::nextReference($date, true),
                 'patient' => $validated['patient'],
@@ -93,7 +97,8 @@ class PrescriptionController extends Controller
                 'consultation_id' => $validated['consultation_id'] ?? null,
                 'medical_record_id' => $validated['medical_record_id']
                     ?? MedicalRecord::where('patient_id', $validated['patient_id'] ?? null)->value('id'),
-                'prescribed_by' => ($validated['prescribed_by'] ?? '') ?: $request->user()->name,
+                'prescribed_by_id' => $prescriberId,
+                'prescribed_by' => $prescriberName,
                 'prescription_date' => $date,
             ]);
 
