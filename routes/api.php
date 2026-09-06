@@ -13,6 +13,7 @@ use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\PrescriptionController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\StaffController;
+use App\Http\Controllers\StaffScheduleController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
@@ -86,6 +87,16 @@ Route::middleware('auth:sanctum')->group(function () {
     // Staff roster (dashboard duty schedule)
     Route::get('/staff', [StaffController::class, 'index'])->middleware('permission:schedules.view');
     Route::patch('/staff/status', [StaffController::class, 'updateStatus'])->middleware('permission:schedules.update');
+
+    // Staff schedules (Module 8 — Doctor/Nurse Schedule)
+    Route::get('/staff-schedules/eligible-staff', [StaffScheduleController::class, 'eligibleStaff'])->middleware('permission:schedules.view');
+    Route::get('/staff-schedules', [StaffScheduleController::class, 'index'])->middleware('permission:schedules.view');
+    Route::get('/staff-schedules/{schedule}', [StaffScheduleController::class, 'show'])->middleware('permission:schedules.view');
+    Route::post('/staff-schedules', [StaffScheduleController::class, 'store'])->middleware('permission:schedules.create');
+    Route::put('/staff-schedules/{schedule}', [StaffScheduleController::class, 'update'])->middleware('permission:schedules.update');
+    Route::patch('/staff-schedules/{schedule}', [StaffScheduleController::class, 'update'])->middleware('permission:schedules.update');
+    Route::delete('/staff-schedules/{schedule}', [StaffScheduleController::class, 'destroy'])->middleware('permission:schedules.delete');
+    Route::patch('/staff-schedules/{schedule}/availability', [StaffScheduleController::class, 'updateAvailability'])->middleware('permission:schedules.update');
 
     // Patients registry
     Route::get('/patients', [PatientController::class, 'index'])->middleware('permission:patients.view');
