@@ -5,14 +5,10 @@ namespace App\Http\Resources;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-class ClinicEventResource extends JsonResource
+class UnavailableScheduleResource extends JsonResource
 {
     /**
-     * Transform the event into the shape the frontend consumes.
-     *
-     * The `date` field is kept for backward compatibility with the
-     * Dashboard events widget. The new fields provide the full calendar
-     * data needed by the Clinic Calendar page.
+     * Transform the unavailable schedule into the shape the frontend consumes.
      *
      * @return array<string, mixed>
      */
@@ -20,16 +16,12 @@ class ClinicEventResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'date' => $this->date,
-            'title' => $this->title,
-            'description' => $this->description ?? '',
             'startDate' => $this->start_date?->format('Y-m-d'),
             'endDate' => $this->end_date?->format('Y-m-d'),
             'startTime' => $this->start_time,
             'endTime' => $this->end_time,
-            'allDay' => $this->all_day ?? false,
-            'type' => $this->type ?? 'Event',
-            'status' => $this->status ?? 'Scheduled',
+            'allDay' => $this->all_day ?? true,
+            'reason' => $this->reason,
             'createdBy' => $this->whenLoaded('creator', fn () => [
                 'id' => $this->creator->id,
                 'name' => $this->creator->name,

@@ -3,6 +3,7 @@
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\ClinicEventController;
 use App\Http\Controllers\ClinicInsightsController;
 use App\Http\Controllers\ConsultationController;
@@ -150,9 +151,22 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/prescriptions', [PrescriptionController::class, 'store'])->middleware('permission:prescriptions.create');
     Route::patch('/prescriptions/{prescription}', [PrescriptionController::class, 'update'])->middleware('permission:prescriptions.update');
 
-    // Campus health events
+    // Campus health events (legacy — Dashboard widget)
     Route::get('/events', [ClinicEventController::class, 'index'])->middleware('permission:calendar.view');
     Route::post('/events', [ClinicEventController::class, 'store'])->middleware('permission:calendar.create');
+
+    // Clinic Calendar (Module 9)
+    Route::get('/calendar', [CalendarController::class, 'index'])->middleware('permission:calendar.view');
+    Route::get('/calendar/events', [CalendarController::class, 'indexEvents'])->middleware('permission:calendar.view');
+    Route::get('/calendar/events/{event}', [CalendarController::class, 'showEvent'])->middleware('permission:calendar.view');
+    Route::post('/calendar/events', [CalendarController::class, 'storeEvent'])->middleware('permission:calendar.create');
+    Route::put('/calendar/events/{event}', [CalendarController::class, 'updateEvent'])->middleware('permission:calendar.update');
+    Route::delete('/calendar/events/{event}', [CalendarController::class, 'destroyEvent'])->middleware('permission:calendar.delete');
+
+    // Unavailable schedules (block)
+    Route::get('/calendar/blocked', [CalendarController::class, 'indexBlocked'])->middleware('permission:calendar.view');
+    Route::post('/calendar/blocked', [CalendarController::class, 'blockSchedule'])->middleware('permission:calendar.block');
+    Route::delete('/calendar/blocked/{block}', [CalendarController::class, 'destroyBlock'])->middleware('permission:calendar.block');
 
     // Dashboard insights (activity bars + peak hours)
     Route::get('/insights/activity', [ClinicInsightsController::class, 'activity'])->middleware('permission:dashboard.view');

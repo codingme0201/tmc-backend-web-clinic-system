@@ -71,6 +71,9 @@ class RolesAndPermissionsSeeder extends Seeder
             'Clinic Calendar' => [
                 ['name' => 'calendar.view', 'label' => 'View Clinic Calendar'],
                 ['name' => 'calendar.create', 'label' => 'Create Clinic Event'],
+                ['name' => 'calendar.update', 'label' => 'Update Clinic Event'],
+                ['name' => 'calendar.delete', 'label' => 'Delete Clinic Event'],
+                ['name' => 'calendar.block', 'label' => 'Block Unavailable Schedule'],
             ],
             'Reports' => [
                 ['name' => 'reports.view', 'label' => 'View Reports'],
@@ -142,7 +145,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'prescriptions.view', 'prescriptions.create',
             'patients.view', 'patients.create',
             'schedules.view',
-            'calendar.view', 'calendar.create',
+            'calendar.view', 'calendar.create', 'calendar.update', 'calendar.delete', 'calendar.block',
             'reports.view',
             'audit_logs.view',
         ])->pluck('id'));
@@ -161,7 +164,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'prescriptions.view', 'prescriptions.create',
             'patients.view', 'patients.create',
             'schedules.view',
-            'calendar.view', 'calendar.create',
+            'calendar.view', 'calendar.create', 'calendar.update', 'calendar.delete', 'calendar.block',
             'audit_logs.view',
         ])->pluck('id'));
 
