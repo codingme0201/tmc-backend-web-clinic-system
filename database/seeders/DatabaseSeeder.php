@@ -42,5 +42,6 @@ class DatabaseSeeder extends Seeder
         $this->call(UnavailableSchedulesSeeder::class);
         $this->call(ActivityLogsSeeder::class);
         $this->call(ClinicInsightsSeeder::class);
+        $this->call(NotificationSeeder::class);
     }
 }

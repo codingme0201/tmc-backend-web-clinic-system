@@ -7,6 +7,7 @@ use App\Http\Requests\StoreAppointmentRequest;
 use App\Http\Requests\UpdateAppointmentStatusRequest;
 use App\Http\Resources\AppointmentResource;
 use App\Models\Appointment;
+use App\Models\Notification;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -82,6 +83,20 @@ class AppointmentController extends Controller
             ]);
         });
 
+        // Notify admin users about new appointment requests.
+        $adminRoleUsers = User::whereHas('role', fn ($q) => $q->where('name', 'admin'))->get();
+        foreach ($adminRoleUsers as $admin) {
+            Notification::create([
+                'user_id' => $admin->id,
+                'title' => 'New Appointment Request',
+                'message' => "{$validated['patient']} has requested a {$validated['type']} appointment for {$validated['date']} at {$validated['time']}.",
+                'type' => 'appointment',
+                'category' => 'appointment',
+                'source' => 'Appointments',
+                'metadata' => ['appointment_reference' => $appointment->reference],
+            ]);
+        }
+
         return (new AppointmentResource($appointment))->response()->setStatusCode(201);
     }
 
@@ -111,6 +126,8 @@ class AppointmentController extends Controller
             'status' => $status,
             'notes' => $this->appendNote($appointment->notes, $request->validated('note')),
         ]);
+
+        $this->notifyStatusChange($appointment, $status);
 
         return new AppointmentResource($appointment);
     }
@@ -150,6 +167,8 @@ class AppointmentController extends Controller
             'notes' => $this->appendNote($appointment->notes, $rescheduleNote),
         ]);
 
+        $this->notifyReschedule($appointment, $date, $time);
+
         return new AppointmentResource($appointment);
     }
 
@@ -175,5 +194,87 @@ class AppointmentController extends Controller
         }
 
         return $existing ? "{$existing}\n{$new}" : $new;
+    }
+
+    /**
+     * Generate notification when appointment status changes.
+     */
+    private function notifyStatusChange(Appointment $appointment, string $status): void
+    {
+        $statusMessages = [
+            'Approved' => "Your appointment {$appointment->reference} ({$appointment->type}) has been approved for {$appointment->date->format('Y-m-d')} at {$appointment->time}.",
+            'Rejected' => "Your appointment {$appointment->reference} ({$appointment->type}) has been rejected.",
+            'Cancelled' => "Your appointment {$appointment->reference} ({$appointment->type}) has been cancelled.",
+            'Completed' => "Your appointment {$appointment->reference} ({$appointment->type}) has been marked as completed.",
+            'Under Review' => "Your appointment {$appointment->reference} ({$appointment->type}) is now under review.",
+        ];
+
+        $message = $statusMessages[$status] ?? "Your appointment {$appointment->reference} status has been updated to {$status}.";
+
+        // Notify the patient if they have a user account.
+        if ($appointment->patient_id) {
+            $patientUser = User::where('id', $appointment->patient_id)->first();
+            if ($patientUser) {
+                Notification::create([
+                    'user_id' => $patientUser->id,
+                    'title' => "Appointment {$status}",
+                    'message' => $message,
+                    'type' => 'appointment',
+                    'category' => 'appointment',
+                    'source' => 'Appointments',
+                    'metadata' => ['appointment_reference' => $appointment->reference],
+                ]);
+            }
+        }
+
+        // Also notify admin for tracking.
+        $adminRoleUsers = User::whereHas('role', fn ($q) => $q->where('name', 'admin'))->get();
+        foreach ($adminRoleUsers as $admin) {
+            Notification::create([
+                'user_id' => $admin->id,
+                'title' => "Appointment {$status}",
+                'message' => "Appointment {$appointment->reference} for {$appointment->patient} has been {$status}.",
+                'type' => 'appointment',
+                'category' => 'appointment',
+                'source' => 'Appointments',
+                'metadata' => ['appointment_reference' => $appointment->reference],
+            ]);
+        }
+    }
+
+    /**
+     * Generate notification when appointment is rescheduled.
+     */
+    private function notifyReschedule(Appointment $appointment, string $newDate, string $newTime): void
+    {
+        $message = "Your appointment {$appointment->reference} ({$appointment->type}) has been rescheduled to {$newDate} at {$newTime}.";
+
+        if ($appointment->patient_id) {
+            $patientUser = User::where('id', $appointment->patient_id)->first();
+            if ($patientUser) {
+                Notification::create([
+                    'user_id' => $patientUser->id,
+                    'title' => 'Appointment Rescheduled',
+                    'message' => $message,
+                    'type' => 'appointment',
+                    'category' => 'appointment',
+                    'source' => 'Appointments',
+                    'metadata' => ['appointment_reference' => $appointment->reference],
+                ]);
+            }
+        }
+
+        $adminRoleUsers = User::whereHas('role', fn ($q) => $q->where('name', 'admin'))->get();
+        foreach ($adminRoleUsers as $admin) {
+            Notification::create([
+                'user_id' => $admin->id,
+                'title' => 'Appointment Rescheduled',
+                'message' => "Appointment {$appointment->reference} for {$appointment->patient} has been rescheduled to {$newDate} at {$newTime}.",
+                'type' => 'appointment',
+                'category' => 'appointment',
+                'source' => 'Appointments',
+                'metadata' => ['appointment_reference' => $appointment->reference],
+            ]);
+        }
     }
 }

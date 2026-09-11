@@ -9,6 +9,7 @@ use App\Http\Controllers\ClinicInsightsController;
 use App\Http\Controllers\ConsultationController;
 use App\Http\Controllers\MedicalCertificateController;
 use App\Http\Controllers\MedicalRecordController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PatientController;
 use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\PrescriptionController;
@@ -180,6 +181,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/users/{user}/status', [UserController::class, 'updateStatus'])->middleware('permission:users.update');
     Route::patch('/users/{user}/role', [UserController::class, 'updateRole'])->middleware('permission:users.update');
     Route::post('/users/{user}/reset-password', [UserController::class, 'resetPassword'])->middleware('permission:users.update');
+
+    // Notifications (Module 11)
+    Route::get('/notifications', [NotificationController::class, 'index'])->middleware('permission:notifications.view');
+    Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount'])->middleware('permission:notifications.view');
+    Route::get('/notifications/{notification}', [NotificationController::class, 'show'])->middleware('permission:notifications.view');
+    Route::post('/notifications', [NotificationController::class, 'store'])->middleware('permission:notifications.send');
+    Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markAsRead'])->middleware('permission:notifications.view');
+    Route::patch('/notifications/read-all', [NotificationController::class, 'markAllAsRead'])->middleware('permission:notifications.view');
+    Route::delete('/notifications/{notification}', [NotificationController::class, 'destroy'])->middleware('permission:notifications.send');
 
     // Activity / audit log
     Route::get('/activity-logs', [ActivityLogController::class, 'index'])->middleware('permission:audit_logs.view');

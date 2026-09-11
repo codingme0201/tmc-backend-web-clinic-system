@@ -82,6 +82,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'Notifications' => [
                 ['name' => 'notifications.view', 'label' => 'View Notifications'],
                 ['name' => 'notifications.send', 'label' => 'Send Notification'],
+                ['name' => 'notifications.manage', 'label' => 'Manage Notifications'],
             ],
             'User Management' => [
                 ['name' => 'users.view', 'label' => 'View Users'],
@@ -148,6 +149,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'calendar.view', 'calendar.create', 'calendar.update', 'calendar.delete', 'calendar.block',
             'reports.view',
             'audit_logs.view',
+            'notifications.view', 'notifications.send',
         ])->pluck('id'));
 
         // Nurse: clinic care support.
@@ -166,6 +168,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'schedules.view',
             'calendar.view', 'calendar.create', 'calendar.update', 'calendar.delete', 'calendar.block',
             'audit_logs.view',
+            'notifications.view',
         ])->pluck('id'));
 
         // Staff: general staff read access.
@@ -180,6 +183,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'schedules.view',
             'calendar.view',
             'audit_logs.view',
+            'notifications.view',
         ])->pluck('id'));
 
         // Any user still without a role defaults to the least-privilege role.
