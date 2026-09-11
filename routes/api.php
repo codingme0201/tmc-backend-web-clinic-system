@@ -13,6 +13,7 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PatientController;
 use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\PrescriptionController;
+use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\StaffController;
@@ -202,6 +203,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/reports/statistics', [ReportController::class, 'statistics']);
     });
     Route::get('/reports/export/{type}', [ReportController::class, 'export'])->middleware('permission:reports.export');
+
+    // System Settings
+    Route::get('/settings', [SettingsController::class, 'index'])->middleware('permission:settings.view');
+    Route::put('/settings', [SettingsController::class, 'update'])->middleware('permission:settings.update');
 
     // Activity / audit log
     Route::get('/activity-logs', [ActivityLogController::class, 'index'])->middleware('permission:audit_logs.view');

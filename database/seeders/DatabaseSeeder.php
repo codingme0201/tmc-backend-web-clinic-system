@@ -29,6 +29,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         $this->call(RolesAndPermissionsSeeder::class);
+        $this->call(SystemSettingSeeder::class);
         $this->call(UserSeeder::class);
         $this->call(StaffSeeder::class);
         $this->call(PatientsSeeder::class);
