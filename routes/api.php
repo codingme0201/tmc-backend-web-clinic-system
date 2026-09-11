@@ -13,6 +13,7 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PatientController;
 use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\PrescriptionController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\StaffController;
 use App\Http\Controllers\StaffScheduleController;
@@ -190,6 +191,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markAsRead'])->middleware('permission:notifications.view');
     Route::patch('/notifications/read-all', [NotificationController::class, 'markAllAsRead'])->middleware('permission:notifications.view');
     Route::delete('/notifications/{notification}', [NotificationController::class, 'destroy'])->middleware('permission:notifications.send');
+
+    // Reports (Module 10)
+    Route::middleware('permission:reports.view')->group(function () {
+        Route::get('/reports/appointments', [ReportController::class, 'appointments']);
+        Route::get('/reports/consultations', [ReportController::class, 'consultations']);
+        Route::get('/reports/patients', [ReportController::class, 'patients']);
+        Route::get('/reports/medical-certificates', [ReportController::class, 'medicalCertificates']);
+        Route::get('/reports/prescriptions', [ReportController::class, 'prescriptions']);
+        Route::get('/reports/statistics', [ReportController::class, 'statistics']);
+    });
+    Route::get('/reports/export/{type}', [ReportController::class, 'export'])->middleware('permission:reports.export');
 
     // Activity / audit log
     Route::get('/activity-logs', [ActivityLogController::class, 'index'])->middleware('permission:audit_logs.view');
