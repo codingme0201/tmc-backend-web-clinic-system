@@ -8,7 +8,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
 class ActivityLogResource extends JsonResource
 {
     /**
-     * Transform the log entry into the shape the Dashboard widget consumes.
+     * Transform the log entry into the shape the audit log page consumes.
      *
      * @return array<string, mixed>
      */
@@ -19,7 +19,10 @@ class ActivityLogResource extends JsonResource
             'userId' => $this->user_id,
             'time' => $this->time,
             'user' => $this->user,
+            'module' => $this->module,
             'action' => $this->action,
+            'role' => $this->whenLoaded('user', fn () => $this->user->role?->name),
+            'createdAt' => $this->created_at?->toIso8601String(),
         ];
     }
 }
