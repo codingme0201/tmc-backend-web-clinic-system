@@ -18,6 +18,36 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 class PatientController extends Controller
 {
     /**
+     * Get the authenticated user's patient profile.
+     */
+    public function myProfile(Request $request): PatientResource
+    {
+        $patient = $request->user()->patient;
+
+        if (! $patient) {
+            abort(404, 'No patient record associated with this user.');
+        }
+
+        $patient->loadCount(['appointments', 'consultations', 'medicalCertificates', 'prescriptions']);
+
+        return new PatientResource($patient);
+    }
+
+    /**
+     * Get the authenticated user's medical records.
+     */
+    public function myMedicalRecords(Request $request): JsonResponse
+    {
+        $patient = $request->user()->patient;
+
+        if (! $patient) {
+            abort(404, 'No patient record associated with this user.');
+        }
+
+        return $this->medicalInformation($patient);
+    }
+
+    /**
      * List patients with optional search.
      *
      * Search matches patient_id, name, type, or course_dept.

@@ -208,8 +208,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/settings', [SettingsController::class, 'index'])->middleware('permission:settings.view');
     Route::put('/settings', [SettingsController::class, 'update'])->middleware('permission:settings.update');
 
-    // Activity / audit log
-    Route::get('/activity-logs', [ActivityLogController::class, 'index'])->middleware('permission:audit_logs.view');
-    // Any authenticated user may record their own actions in the log.
-    Route::post('/activity-logs', [ActivityLogController::class, 'store']);
+    // User Self-Service (My Data)
+    Route::prefix('me')->group(function () {
+        Route::get('/profile', [PatientController::class, 'myProfile']);
+        Route::get('/appointments', [AppointmentController::class, 'myAppointments']);
+        Route::post('/appointments', [AppointmentController::class, 'storeMyAppointment']);
+        Route::get('/consultations', [ConsultationController::class, 'myConsultations']);
+        Route::get('/consultations/{consultation}', [ConsultationController::class, 'myConsultationShow']);
+        Route::get('/medical-records', [PatientController::class, 'myMedicalRecords']);
+        Route::get('/notifications', [NotificationController::class, 'myNotifications']);
+    });
 });

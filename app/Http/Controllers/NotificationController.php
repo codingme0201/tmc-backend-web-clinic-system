@@ -15,6 +15,14 @@ class NotificationController extends Controller
     /**
      * List the authenticated user's notifications.
      */
+    public function myNotifications(Request $request): AnonymousResourceCollection
+    {
+        return $this->index($request);
+    }
+
+    /**
+     * List the authenticated user's notifications.
+     */
     public function index(Request $request): AnonymousResourceCollection
     {
         $query = Notification::where('user_id', $request->user()->id);

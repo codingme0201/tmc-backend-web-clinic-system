@@ -17,6 +17,80 @@ use Illuminate\Support\Facades\DB;
 class AppointmentController extends Controller
 {
     /**
+     * List appointments for the authenticated patient.
+     */
+    public function myAppointments(Request $request): AnonymousResourceCollection
+    {
+        $patient = $request->user()->patient;
+
+        if (! $patient) {
+            abort(404, 'No patient record associated with this user.');
+        }
+
+        $appointments = Appointment::where('patient_id', $patient->patient_id)
+            ->orderBy('date')
+            ->orderBy('time')
+            ->get();
+
+        return AppointmentResource::collection($appointments);
+    }
+
+    /**
+     * Request a new appointment for the authenticated patient.
+     */
+    public function storeMyAppointment(Request $request): JsonResponse
+    {
+        $patient = $request->user()->patient;
+
+        if (! $patient) {
+            abort(404, 'No patient record associated with this user.');
+        }
+
+        $validated = $request->validate([
+            'type' => ['required', 'string'],
+            'reason' => ['required', 'string'],
+            'date' => ['required', 'date', 'after_or_equal:today'],
+            'time' => ['required', 'string'],
+            'staff' => ['nullable', 'string'],
+        ]);
+
+        $appointment = DB::transaction(function () use ($request, $validated, $patient) {
+            $staffName = $validated['staff'] ?? '';
+            $staffId = $staffName ? User::where('name', $staffName)->value('id') : null;
+
+            return Appointment::create([
+                'patient' => $patient->name,
+                'patient_id' => $patient->patient_id,
+                'type' => $validated['type'],
+                'reason' => $validated['reason'],
+                'date' => $validated['date'],
+                'time' => $validated['time'],
+                'staff' => $staffName,
+                'staff_id' => $staffId,
+                'reference' => Appointment::nextReference($validated['date'], true),
+                'status' => 'Pending',
+                'requested_on' => now()->toDateString(),
+            ]);
+        });
+
+        // Notify admin users
+        $adminRoleUsers = User::whereHas('role', fn ($q) => $q->where('name', 'admin'))->get();
+        foreach ($adminRoleUsers as $admin) {
+            Notification::create([
+                'user_id' => $admin->id,
+                'title' => 'New Appointment Request',
+                'message' => "{$patient->name} has requested a {$validated['type']} appointment for {$validated['date']} at {$validated['time']}.",
+                'type' => 'appointment',
+                'category' => 'appointment',
+                'source' => 'Appointments',
+                'metadata' => ['appointment_reference' => $appointment->reference],
+            ]);
+        }
+
+        return (new AppointmentResource($appointment))->response()->setStatusCode(201);
+    }
+
+    /**
      * List appointments, optionally filtered by search/status/date.
      *
      * The existing frontend also searches, filters, and paginates client-side

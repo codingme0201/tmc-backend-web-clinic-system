@@ -14,7 +14,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Patient extends Model
 {
     /** @use HasFactory<\Database\Factories\PatientFactory> */
-    use HasFactory;
+    public function user(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(User::class, 'patient_id', 'patient_id');
+    }
     public function appointments(): HasMany
     {
         return $this->hasMany(Appointment::class, 'patient_id', 'patient_id');

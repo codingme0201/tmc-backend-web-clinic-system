@@ -41,6 +41,11 @@ class User extends Authenticatable
         return $this->belongsTo(Role::class, 'role_id');
     }
 
+    public function patient(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Patient::class, 'patient_id', 'patient_id');
+    }
+
     public function staffSchedules(): HasMany
     {
         return $this->hasMany(StaffSchedule::class);

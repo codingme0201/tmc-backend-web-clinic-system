@@ -57,6 +57,39 @@ class ConsultationController extends Controller
     }
 
     /**
+     * List consultations for the authenticated patient.
+     */
+    public function myConsultations(Request $request): AnonymousResourceCollection
+    {
+        $patient = $request->user()->patient;
+
+        if (! $patient) {
+            abort(404, 'No patient record associated with this user.');
+        }
+
+        $consultations = Consultation::where('patient_id', $patient->patient_id)
+            ->orderByDesc('date')
+            ->orderByDesc('time')
+            ->get();
+
+        return ConsultationResource::collection($consultations);
+    }
+
+    /**
+     * Show a specific consultation for the authenticated patient.
+     */
+    public function myConsultationShow(Consultation $consultation, Request $request): ConsultationResource|JsonResponse
+    {
+        $patient = $request->user()->patient;
+
+        if (! $patient || $consultation->patient_id !== $patient->patient_id) {
+            abort(403, 'You do not have permission to view this consultation.');
+        }
+
+        return new ConsultationResource($consultation);
+    }
+
+    /**
      * Log a new consultation.
      *
      * Accepts both the full consultation shape and the legacy shape the
