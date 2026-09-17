@@ -11,8 +11,8 @@ class ActivityLog extends Model
 {
     protected $table = 'activity_logs';
 
-    public function user(): BelongsTo
+    public function author(): BelongsTo
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class, 'user_id');
     }
 }

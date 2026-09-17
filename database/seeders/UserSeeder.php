@@ -18,6 +18,7 @@ class UserSeeder extends Seeder
         $doctorRoleId = Role::where('name', 'doctor')->value('id');
         $nurseRoleId = Role::where('name', 'nurse')->value('id');
         $staffRoleId = Role::where('name', 'staff')->value('id');
+        $patientRoleId = Role::where('name', 'patient')->value('id') ?? $staffRoleId;
 
         $users = [
             [
@@ -69,10 +70,43 @@ class UserSeeder extends Seeder
                 'role_id' => $nurseRoleId,
                 'status' => 'active',
             ],
+            // Mobile Patient Accounts
+            [
+                'name' => 'Angela Reyes',
+                'email' => 'demo@tmccarelink.com',
+                'password' => 'Demo1234',
+                'role_id' => $patientRoleId,
+                'patient_id' => '2023-0104',
+                'status' => 'active',
+            ],
+            [
+                'name' => 'Angela Reyes',
+                'email' => 'angela.reyes@tmc.edu.ph',
+                'password' => 'password',
+                'role_id' => $patientRoleId,
+                'patient_id' => '2023-0104',
+                'status' => 'active',
+            ],
+            [
+                'name' => 'Mark Dela Cruz',
+                'email' => 'mark.delacruz@tmc.edu.ph',
+                'password' => 'password',
+                'role_id' => $patientRoleId,
+                'patient_id' => '2022-0941',
+                'status' => 'active',
+            ],
+            [
+                'name' => 'Joanna Lim',
+                'email' => 'joanna.lim@tmc.edu.ph',
+                'password' => 'password',
+                'role_id' => $patientRoleId,
+                'patient_id' => '2021-1122',
+                'status' => 'active',
+            ],
         ];
 
         foreach ($users as $user) {
-            User::firstOrCreate(['email' => $user['email']], $user);
+            User::updateOrCreate(['email' => $user['email']], $user);
         }
     }
 }

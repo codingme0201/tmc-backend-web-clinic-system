@@ -118,8 +118,55 @@ class NotificationSeeder extends Seeder
             ],
         ];
 
+        // Seed notifications for patient users (such as Angela Reyes / demo user)
+        $patientUsers = User::whereNotNull('patient_id')->get();
+        foreach ($patientUsers as $patientUser) {
+            $notifications[] = [
+                'user_id' => $patientUser->id,
+                'title' => 'Appointment Reminder',
+                'message' => 'You have an upcoming consultation with Dr. R. Mendoza on Sep 22 at 10:00 AM.',
+                'type' => 'appointment',
+                'category' => 'appointment',
+                'source' => 'Appointments',
+                'is_read' => false,
+                'metadata' => ['appointment_reference' => 'APT-2026-011'],
+            ];
+            $notifications[] = [
+                'user_id' => $patientUser->id,
+                'title' => 'Medical Certificate Issued',
+                'message' => 'Your medical certificate MC-2026-001 has been approved and issued.',
+                'type' => 'medical_certificate',
+                'category' => 'medical_certificate',
+                'source' => 'Medical Certificates',
+                'is_read' => false,
+                'metadata' => ['certificate_reference' => 'MC-2026-001'],
+            ];
+            $notifications[] = [
+                'user_id' => $patientUser->id,
+                'title' => 'Prescription Available',
+                'message' => 'Prescription RX-2026-001 has been recorded from your recent consultation.',
+                'type' => 'prescription',
+                'category' => 'prescription',
+                'source' => 'Prescriptions',
+                'is_read' => true,
+                'metadata' => ['prescription_reference' => 'RX-2026-001'],
+            ];
+            $notifications[] = [
+                'user_id' => $patientUser->id,
+                'title' => 'Clinic Announcement',
+                'message' => 'Annual Student Physical Checkup Drive starts on Sep 01 at the TMC Main Clinic.',
+                'type' => 'system',
+                'category' => 'system',
+                'source' => 'Clinic Calendar',
+                'is_read' => true,
+            ];
+        }
+
         foreach ($notifications as $data) {
-            Notification::create($data);
+            Notification::firstOrCreate([
+                'user_id' => $data['user_id'],
+                'title' => $data['title'],
+            ], $data);
         }
     }
 }

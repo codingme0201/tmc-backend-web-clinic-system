@@ -13,6 +13,10 @@ class DatabaseSeeder extends Seeder
 
     public function run(): void
     {
+        $this->call(RolesAndPermissionsSeeder::class);
+        $this->call(SystemSettingSeeder::class);
+        $this->call(PatientsSeeder::class);
+
         $staffRoleId = Role::where('name', 'staff')->value('id');
         $adminRoleId = Role::where('name', 'admin')->value('id');
 
@@ -28,11 +32,8 @@ class DatabaseSeeder extends Seeder
             'role_id' => $adminRoleId,
         ]);
 
-        $this->call(RolesAndPermissionsSeeder::class);
-        $this->call(SystemSettingSeeder::class);
         $this->call(UserSeeder::class);
         $this->call(StaffSeeder::class);
-        $this->call(PatientsSeeder::class);
         $this->call(AppointmentsSeeder::class);
         $this->call(ConsultationsSeeder::class);
         $this->call(MedicalRecordsSeeder::class);

@@ -56,6 +56,68 @@ class MedicalCertificateController extends Controller
     }
 
     /**
+     * List medical certificates for the authenticated patient.
+     */
+    public function myCertificates(Request $request): AnonymousResourceCollection
+    {
+        $patient = $request->user()->patient;
+
+        if (! $patient) {
+            abort(404, 'No patient record associated with this user.');
+        }
+
+        $certificates = MedicalCertificate::where('patient_id', $patient->patient_id)
+            ->orderByDesc('issue_date')
+            ->orderByDesc('id')
+            ->get();
+
+        return MedicalCertificateResource::collection($certificates);
+    }
+
+    /**
+     * Request a medical certificate by the authenticated patient.
+     */
+    public function storeMyCertificate(Request $request): JsonResponse
+    {
+        $patient = $request->user()->patient;
+
+        if (! $patient) {
+            abort(404, 'No patient record associated with this user.');
+        }
+
+        $validated = $request->validate([
+            'purpose' => ['required', 'string', 'max:255'],
+            'consultationId' => ['nullable'],
+            'diagnosis' => ['nullable', 'string'],
+        ]);
+
+        $issueDate = now()->toDateString();
+
+        $certificate = DB::transaction(function () use ($request, $patient, $validated, $issueDate) {
+            $consultationId = $validated['consultationId'] ?? null;
+            $medicalRecord = \App\Models\MedicalRecord::where('patient_id', $patient->patient_id)->first();
+
+            return MedicalCertificate::create([
+                'reference' => MedicalCertificate::nextReference($issueDate, true),
+                'patient' => $patient->name,
+                'patient_id' => $patient->patient_id,
+                'consultation_id' => $consultationId,
+                'medical_record_id' => $medicalRecord?->id,
+                'requested_by_id' => $request->user()->id,
+                'requested_by' => $patient->name,
+                'issued_by' => '',
+                'purpose' => $validated['purpose'],
+                'diagnosis' => $validated['diagnosis'] ?? '',
+                'recommendation' => '',
+                'issue_date' => $issueDate,
+                'status' => 'Pending',
+            ]);
+        });
+
+        return (new MedicalCertificateResource($certificate))->response()->setStatusCode(201);
+    }
+
+    /**
      * Submit a new medical certificate request.
      *
      * Reuses existing patient/consultation/medical-record data; the reference

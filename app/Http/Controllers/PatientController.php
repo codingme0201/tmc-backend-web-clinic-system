@@ -3,14 +3,19 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\UpdatePatientStatusRequest;
+use App\Http\Resources\AppointmentResource;
+use App\Http\Resources\MedicalCertificateResource;
 use App\Http\Resources\MedicalRecordResource;
 use App\Http\Resources\PatientResource;
+use App\Http\Resources\PrescriptionResource;
 use App\Models\Appointment;
 use App\Models\Consultation;
 use App\Models\MedicalCertificate;
 use App\Models\MedicalRecord;
+use App\Models\Notification;
 use App\Models\Patient;
 use App\Models\Prescription;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -34,6 +39,39 @@ class PatientController extends Controller
     }
 
     /**
+     * Update the authenticated user's patient profile.
+     */
+    public function updateMyProfile(Request $request): PatientResource
+    {
+        $patient = $request->user()->patient;
+
+        if (! $patient) {
+            abort(404, 'No patient record associated with this user.');
+        }
+
+        $validated = $request->validate([
+            'contact' => ['nullable', 'string', 'max:50'],
+            'emergencyContact' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $updateData = [];
+        if (array_key_exists('contact', $validated)) {
+            $updateData['contact'] = $validated['contact'] ?? '';
+        }
+        if (array_key_exists('emergencyContact', $validated)) {
+            $updateData['emergency_contact'] = $validated['emergencyContact'] ?? '';
+        }
+
+        if (! empty($updateData)) {
+            $patient->update($updateData);
+        }
+
+        $patient->loadCount(['appointments', 'consultations', 'medicalCertificates', 'prescriptions']);
+
+        return new PatientResource($patient);
+    }
+
+    /**
      * Get the authenticated user's medical records.
      */
     public function myMedicalRecords(Request $request): JsonResponse
@@ -45,6 +83,20 @@ class PatientController extends Controller
         }
 
         return $this->medicalInformation($patient);
+    }
+
+    /**
+     * Get the authenticated user's aggregated chronological timeline.
+     */
+    public function myRecordHistory(Request $request): JsonResponse
+    {
+        $patient = $request->user()->patient;
+
+        if (! $patient) {
+            abort(404, 'No patient record associated with this user.');
+        }
+
+        return $this->recordHistory($patient);
     }
 
     /**
@@ -233,5 +285,102 @@ class PatientController extends Controller
         ]);
 
         return (new PatientResource($patient))->response()->setStatusCode(201);
+    }
+
+    /**
+     * Search patient's own records across appointments, certificates, prescriptions, and medical records.
+     */
+    public function search(Request $request): JsonResponse
+    {
+        $patient = $request->user()->patient;
+
+        if (! $patient) {
+            abort(404, 'No patient record associated with this user.');
+        }
+
+        $q = trim((string) $request->query('q', ''));
+        if ($q === '') {
+            return response()->json([
+                'data' => [
+                    'appointments' => [],
+                    'certificates' => [],
+                    'prescriptions' => [],
+                    'medicalRecord' => null,
+                ],
+            ]);
+        }
+
+        $pid = $patient->patient_id;
+
+        $appointments = Appointment::where('patient_id', $pid)
+            ->where(function ($query) use ($q) {
+                $query->where('reference', 'like', "%{$q}%")
+                    ->orWhere('type', 'like', "%{$q}%")
+                    ->orWhere('reason', 'like', "%{$q}%")
+                    ->orWhere('staff', 'like', "%{$q}%");
+            })
+            ->get();
+
+        $certificates = MedicalCertificate::where('patient_id', $pid)
+            ->where(function ($query) use ($q) {
+                $query->where('reference', 'like', "%{$q}%")
+                    ->orWhere('purpose', 'like', "%{$q}%")
+                    ->orWhere('diagnosis', 'like', "%{$q}%");
+            })
+            ->get();
+
+        $prescriptions = Prescription::where('patient_id', $pid)
+            ->where(function ($query) use ($q) {
+                $query->where('reference', 'like', "%{$q}%")
+                    ->orWhere('prescribed_by', 'like', "%{$q}%")
+                    ->orWhereHas('medications', fn ($m) => $m->where('medicine_name', 'like', "%{$q}%"));
+            })
+            ->with('medications')
+            ->get();
+
+        $medicalRecord = MedicalRecord::where('patient_id', $pid)
+            ->with(['histories', 'conditions', 'allergies', 'medications'])
+            ->first();
+
+        return response()->json([
+            'data' => [
+                'appointments' => AppointmentResource::collection($appointments),
+                'certificates' => MedicalCertificateResource::collection($certificates),
+                'prescriptions' => PrescriptionResource::collection($prescriptions),
+                'medicalRecord' => $medicalRecord ? (new MedicalRecordResource($medicalRecord))->resolve() : null,
+            ],
+        ]);
+    }
+
+    /**
+     * Submit a support concern from the mobile application.
+     */
+    public function submitSupport(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'subject' => ['required', 'string', 'max:255'],
+            'message' => ['required', 'string', 'max:2000'],
+            'category' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        $user = $request->user();
+
+        // Notify admins about the support concern
+        $admins = User::whereHas('role', fn ($q) => $q->where('name', 'admin'))->get();
+        foreach ($admins as $admin) {
+            Notification::create([
+                'user_id' => $admin->id,
+                'title' => "Support Concern: {$validated['subject']}",
+                'message' => "Patient {$user->name} ({$user->email}) submitted: {$validated['message']}",
+                'type' => 'system',
+                'category' => 'support',
+                'source' => 'Support',
+                'is_read' => false,
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Your support concern has been submitted successfully.',
+        ], 201);
     }
 }

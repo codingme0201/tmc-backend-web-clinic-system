@@ -67,6 +67,29 @@ class AuthController extends Controller
     }
 
     /**
+     * Change the authenticated user's password.
+     */
+    public function changePassword(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'currentPassword' => ['required', 'string'],
+            'newPassword' => ['required', 'string', 'min:6'],
+        ]);
+
+        $user = $request->user();
+
+        if (! Hash::check($validated['currentPassword'], $user->password)) {
+            return response()->json(['message' => 'The current password is incorrect.'], 422);
+        }
+
+        $user->update([
+            'password' => $validated['newPassword'],
+        ]);
+
+        return response()->json(['message' => 'Password updated successfully.']);
+    }
+
+    /**
      * Shape the user payload exposed through the API.
      *
      * Passwords and tokens are never included. `role` is the role name and
@@ -85,6 +108,7 @@ class AuthController extends Controller
             'name' => $user->name,
             'email' => $user->email,
             'role' => $user->role?->name,
+            'patientId' => $user->patient_id,
             'permissions' => $user->role?->permissions->pluck('name')->values()->all() ?? [],
         ];
     }

@@ -18,7 +18,7 @@ class ActivityLogController extends Controller
      */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $query = ActivityLog::with('user.role');
+        $query = ActivityLog::with('author.role');
 
         // Search — matches action text or user name
         if ($search = $request->query('search')) {
@@ -76,6 +76,6 @@ class ActivityLogController extends Controller
             'action' => $validated['action'],
         ]);
 
-        return (new ActivityLogResource($entry->load('user.role')))->response()->setStatusCode(201);
+        return (new ActivityLogResource($entry->load('author.role')))->response()->setStatusCode(201);
     }
 }

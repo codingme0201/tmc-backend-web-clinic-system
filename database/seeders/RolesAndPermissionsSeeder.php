@@ -186,6 +186,12 @@ class RolesAndPermissionsSeeder extends Seeder
             'notifications.view',
         ])->pluck('id'));
 
+        // Patient: mobile/portal patient self-service.
+        $patientRole = Role::firstOrCreate(
+            ['name' => 'patient'],
+            ['description' => 'Patient — student or faculty self-service access'],
+        );
+
         // Any user still without a role defaults to the least-privilege role.
         User::whereNull('role_id')->update(['role_id' => $staff->id]);
     }

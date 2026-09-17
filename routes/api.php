@@ -208,14 +208,37 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/settings', [SettingsController::class, 'index'])->middleware('permission:settings.view');
     Route::put('/settings', [SettingsController::class, 'update'])->middleware('permission:settings.update');
 
-    // User Self-Service (My Data)
+    // Activity & Audit Logs
+    Route::middleware('permission:audit_logs.view')->group(function () {
+        Route::get('/activity-logs', [ActivityLogController::class, 'index']);
+    });
+    Route::post('/activity-logs', [ActivityLogController::class, 'store']);
+
+    // User Self-Service (My Data & Mobile Client)
     Route::prefix('me')->group(function () {
         Route::get('/profile', [PatientController::class, 'myProfile']);
+        Route::put('/profile', [PatientController::class, 'updateMyProfile']);
         Route::get('/appointments', [AppointmentController::class, 'myAppointments']);
         Route::post('/appointments', [AppointmentController::class, 'storeMyAppointment']);
+        Route::get('/appointments/{appointment}', [AppointmentController::class, 'showMyAppointment']);
+        Route::post('/appointments/{appointment}/reschedule', [AppointmentController::class, 'rescheduleMyAppointment']);
+        Route::post('/appointments/{appointment}/cancel', [AppointmentController::class, 'cancelMyAppointment']);
         Route::get('/consultations', [ConsultationController::class, 'myConsultations']);
         Route::get('/consultations/{consultation}', [ConsultationController::class, 'myConsultationShow']);
         Route::get('/medical-records', [PatientController::class, 'myMedicalRecords']);
+        Route::get('/record-history', [PatientController::class, 'myRecordHistory']);
+        Route::get('/medical-certificates', [MedicalCertificateController::class, 'myCertificates']);
+        Route::post('/medical-certificates', [MedicalCertificateController::class, 'storeMyCertificate']);
+        Route::get('/prescriptions', [PrescriptionController::class, 'myPrescriptions']);
+        Route::get('/prescriptions/{prescription}', [PrescriptionController::class, 'myPrescriptionShow']);
         Route::get('/notifications', [NotificationController::class, 'myNotifications']);
+        Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markAsRead']);
+        Route::patch('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
+        Route::get('/clinic-information', [SettingsController::class, 'index']);
+        Route::get('/clinic-activities', [CalendarController::class, 'indexEvents']);
+        Route::get('/staff-schedules', [StaffScheduleController::class, 'index']);
+        Route::post('/change-password', [AuthController::class, 'changePassword']);
+        Route::get('/search', [PatientController::class, 'search']);
+        Route::post('/support', [PatientController::class, 'submitSupport']);
     });
 });

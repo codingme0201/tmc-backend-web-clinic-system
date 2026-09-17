@@ -91,6 +91,101 @@ class AppointmentController extends Controller
     }
 
     /**
+     * Show a single appointment for the authenticated patient.
+     */
+    public function showMyAppointment(Appointment $appointment, Request $request): AppointmentResource
+    {
+        $patient = $request->user()->patient;
+
+        if (! $patient || $appointment->patient_id !== $patient->patient_id) {
+            abort(403, 'You do not have permission to view this appointment.');
+        }
+
+        return new AppointmentResource($appointment);
+    }
+
+    /**
+     * Reschedule an appointment by the authenticated patient.
+     */
+    public function rescheduleMyAppointment(Appointment $appointment, Request $request): AppointmentResource|JsonResponse
+    {
+        $patient = $request->user()->patient;
+
+        if (! $patient || $appointment->patient_id !== $patient->patient_id) {
+            abort(403, 'You do not have permission to reschedule this appointment.');
+        }
+
+        if (! in_array($appointment->status, ['Pending', 'Under Review', 'Approved', 'Rescheduled'], true)) {
+            return response()->json([
+                'message' => "Appointments in \"{$appointment->status}\" status cannot be rescheduled.",
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'date' => ['required', 'date', 'after_or_equal:today'],
+            'time' => ['required', 'string'],
+            'reason' => ['nullable', 'string'],
+        ]);
+
+        $date = $validated['date'];
+        $time = $validated['time'];
+        $reason = $validated['reason'] ?? '';
+
+        $rescheduleNote = sprintf(
+            'Patient requested reschedule from %s %s to %s %s%s',
+            $appointment->date->format('Y-m-d'),
+            $appointment->time,
+            $date,
+            $time,
+            $reason ? " — {$reason}" : '',
+        );
+
+        $appointment->update([
+            'date' => $date,
+            'time' => $time,
+            'status' => 'Rescheduled',
+            'notes' => $this->appendNote($appointment->notes, $rescheduleNote),
+        ]);
+
+        $this->notifyReschedule($appointment, $date, $time);
+
+        return new AppointmentResource($appointment);
+    }
+
+    /**
+     * Cancel an appointment by the authenticated patient.
+     */
+    public function cancelMyAppointment(Appointment $appointment, Request $request): AppointmentResource|JsonResponse
+    {
+        $patient = $request->user()->patient;
+
+        if (! $patient || $appointment->patient_id !== $patient->patient_id) {
+            abort(403, 'You do not have permission to cancel this appointment.');
+        }
+
+        if (in_array($appointment->status, ['Completed', 'Cancelled', 'No-Show'], true)) {
+            return response()->json([
+                'message' => "Appointments in \"{$appointment->status}\" status cannot be cancelled.",
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'reason' => ['nullable', 'string'],
+        ]);
+
+        $cancelReason = $validated['reason'] ?? 'Cancelled by patient';
+
+        $appointment->update([
+            'status' => 'Cancelled',
+            'notes' => $this->appendNote($appointment->notes, "Patient cancelled: {$cancelReason}"),
+        ]);
+
+        $this->notifyStatusChange($appointment, 'Cancelled');
+
+        return new AppointmentResource($appointment);
+    }
+
+    /**
      * List appointments, optionally filtered by search/status/date.
      *
      * The existing frontend also searches, filters, and paginates client-side
@@ -287,7 +382,7 @@ class AppointmentController extends Controller
 
         // Notify the patient if they have a user account.
         if ($appointment->patient_id) {
-            $patientUser = User::where('id', $appointment->patient_id)->first();
+            $patientUser = User::where('patient_id', $appointment->patient_id)->first();
             if ($patientUser) {
                 Notification::create([
                     'user_id' => $patientUser->id,
@@ -324,7 +419,7 @@ class AppointmentController extends Controller
         $message = "Your appointment {$appointment->reference} ({$appointment->type}) has been rescheduled to {$newDate} at {$newTime}.";
 
         if ($appointment->patient_id) {
-            $patientUser = User::where('id', $appointment->patient_id)->first();
+            $patientUser = User::where('patient_id', $appointment->patient_id)->first();
             if ($patientUser) {
                 Notification::create([
                     'user_id' => $patientUser->id,

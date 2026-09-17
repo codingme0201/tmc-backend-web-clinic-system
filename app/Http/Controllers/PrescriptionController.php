@@ -73,6 +73,42 @@ class PrescriptionController extends Controller
     }
 
     /**
+     * List prescriptions for the authenticated patient.
+     */
+    public function myPrescriptions(Request $request): AnonymousResourceCollection
+    {
+        $patient = $request->user()->patient;
+
+        if (! $patient) {
+            abort(404, 'No patient record associated with this user.');
+        }
+
+        $prescriptions = Prescription::where('patient_id', $patient->patient_id)
+            ->with(['medications', 'consultation'])
+            ->orderByDesc('prescription_date')
+            ->orderByDesc('id')
+            ->get();
+
+        return PrescriptionResource::collection($prescriptions);
+    }
+
+    /**
+     * Show a specific prescription for the authenticated patient.
+     */
+    public function myPrescriptionShow(Prescription $prescription, Request $request): PrescriptionResource
+    {
+        $patient = $request->user()->patient;
+
+        if (! $patient || $prescription->patient_id !== $patient->patient_id) {
+            abort(403, 'You do not have permission to view this prescription.');
+        }
+
+        return new PrescriptionResource(
+            $prescription->loadMissing(['medications', 'consultation']),
+        );
+    }
+
+    /**
      * Create a prescription record (during or after a consultation).
      *
      * The reference is assigned sequentially for the prescription date inside
