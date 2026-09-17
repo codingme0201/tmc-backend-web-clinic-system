@@ -17,7 +17,7 @@ class PrescriptionsSeeder extends Seeder
 
         $prescriptions = [
             [
-                'reference' => 'RX-2026-001', 'patient' => 'Angela Reyes', 'patient_id' => '2023-0104',
+                'reference' => 'RX-2026-001', 'patient' => 'Angela Reyes', 'patient_id' => '24-021128',
                 'consultation_id' => $consultationId('CONS-2026-001'),
                 'prescribed_by' => 'Dr. R. Mendoza', 'prescription_date' => '2026-07-30',
                 'medications' => [
@@ -26,7 +26,7 @@ class PrescriptionsSeeder extends Seeder
                 ],
             ],
             [
-                'reference' => 'RX-2026-002', 'patient' => 'Joanna Lim', 'patient_id' => '2021-1122',
+                'reference' => 'RX-2026-002', 'patient' => 'Joanna Lim', 'patient_id' => '21-011122',
                 'consultation_id' => $consultationId('CONS-2026-002'),
                 'prescribed_by' => 'Nurse C. Villanueva', 'prescription_date' => '2026-07-30',
                 'medications' => [
@@ -35,7 +35,7 @@ class PrescriptionsSeeder extends Seeder
                 ],
             ],
             [
-                'reference' => 'RX-2026-003', 'patient' => 'Mark Dela Cruz', 'patient_id' => '2022-0941',
+                'reference' => 'RX-2026-003', 'patient' => 'Mark Dela Cruz', 'patient_id' => '22-010941',
                 'consultation_id' => $consultationId('CONS-2026-003'),
                 'prescribed_by' => 'Dr. R. Mendoza', 'prescription_date' => '2026-07-29',
                 'medications' => [
@@ -52,7 +52,7 @@ class PrescriptionsSeeder extends Seeder
                 ],
             ],
             [
-                'reference' => 'RX-2026-005', 'patient' => 'Patricia Mae Garcia', 'patient_id' => '2024-0012',
+                'reference' => 'RX-2026-005', 'patient' => 'Patricia Mae Garcia', 'patient_id' => '24-010012',
                 'consultation_id' => $consultationId('CONS-2026-005'),
                 'prescribed_by' => 'Dr. S. Lopez', 'prescription_date' => '2026-07-28',
                 'medications' => [
@@ -60,7 +60,7 @@ class PrescriptionsSeeder extends Seeder
                 ],
             ],
             [
-                'reference' => 'RX-2026-006', 'patient' => 'John Paul Santos', 'patient_id' => '2023-0881',
+                'reference' => 'RX-2026-006', 'patient' => 'John Paul Santos', 'patient_id' => '23-010881',
                 'consultation_id' => $consultationId('CONS-2026-013'),
                 'prescribed_by' => 'Nurse C. Villanueva', 'prescription_date' => '2026-08-01',
                 'medications' => [
@@ -69,7 +69,7 @@ class PrescriptionsSeeder extends Seeder
                 ],
             ],
             [
-                'reference' => 'RX-2026-007', 'patient' => 'Mark Dela Cruz', 'patient_id' => '2022-0941',
+                'reference' => 'RX-2026-007', 'patient' => 'Mark Dela Cruz', 'patient_id' => '22-010941',
                 'consultation_id' => null,
                 'prescribed_by' => 'Dr. R. Mendoza', 'prescription_date' => '2026-08-03',
                 'medications' => [
@@ -77,7 +77,7 @@ class PrescriptionsSeeder extends Seeder
                 ],
             ],
             [
-                'reference' => 'RX-2026-008', 'patient' => 'Angela Reyes', 'patient_id' => '2023-0104',
+                'reference' => 'RX-2026-008', 'patient' => 'Angela Reyes', 'patient_id' => '24-021128',
                 'consultation_id' => null,
                 'prescribed_by' => 'Dr. R. Mendoza', 'prescription_date' => '2026-08-05',
                 'medications' => [

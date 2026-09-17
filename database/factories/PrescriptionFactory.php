@@ -22,12 +22,12 @@ class PrescriptionFactory extends Factory
     public function definition(): array
     {
         $patient = fake()->randomElement([
-            ['name' => 'Angela Reyes', 'id' => '2023-0104'],
-            ['name' => 'Mark Dela Cruz', 'id' => '2022-0941'],
-            ['name' => 'Joanna Lim', 'id' => '2021-1122'],
+            ['name' => 'Angela Reyes', 'id' => '24-021128'],
+            ['name' => 'Mark Dela Cruz', 'id' => '22-010941'],
+            ['name' => 'Joanna Lim', 'id' => '21-011122'],
             ['name' => 'Susan Clave', 'id' => 'EMP-119'],
-            ['name' => 'John Paul Santos', 'id' => '2023-0881'],
-            ['name' => 'Patricia Mae Garcia', 'id' => '2024-0012'],
+            ['name' => 'John Paul Santos', 'id' => '23-010881'],
+            ['name' => 'Patricia Mae Garcia', 'id' => '24-010012'],
         ]);
         $date = fake()->dateTimeBetween('-90 days', 'today');
 

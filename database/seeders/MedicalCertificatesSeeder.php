@@ -17,7 +17,7 @@ class MedicalCertificatesSeeder extends Seeder
         $certificates = [
             [
                 'reference' => 'MC-2026-001',
-                'patient' => 'Angela Reyes', 'patient_id' => '2023-0104',
+                'patient' => 'Angela Reyes', 'patient_id' => '24-021128',
                 'consultation_ref' => 'CONS-2026-001',
                 'issued_by' => 'Dr. R. Mendoza',
                 'purpose' => 'Medical Excuse — Clinic Visit',
@@ -28,7 +28,7 @@ class MedicalCertificatesSeeder extends Seeder
             ],
             [
                 'reference' => 'MC-2026-002',
-                'patient' => 'Joanna Lim', 'patient_id' => '2021-1122',
+                'patient' => 'Joanna Lim', 'patient_id' => '21-011122',
                 'consultation_ref' => 'CONS-2026-002',
                 'issued_by' => 'Nurse C. Villanueva',
                 'purpose' => 'Medical Excuse — Clinic Visit',
@@ -39,7 +39,7 @@ class MedicalCertificatesSeeder extends Seeder
             ],
             [
                 'reference' => 'MC-2026-003',
-                'patient' => 'Joanna Lim', 'patient_id' => '2021-1122',
+                'patient' => 'Joanna Lim', 'patient_id' => '21-011122',
                 'consultation_ref' => 'CONS-2026-002',
                 'issued_by' => 'Dr. R. Mendoza',
                 'purpose' => 'Medical Excuse — Clinic Visit',
@@ -50,7 +50,7 @@ class MedicalCertificatesSeeder extends Seeder
             ],
             [
                 'reference' => 'MC-2026-004',
-                'patient' => 'Mark Dela Cruz', 'patient_id' => '2022-0941',
+                'patient' => 'Mark Dela Cruz', 'patient_id' => '22-010941',
                 'consultation_ref' => 'CONS-2026-003',
                 'issued_by' => 'Dr. R. Mendoza',
                 'purpose' => 'Medical Excuse — Clinic Visit',
@@ -72,7 +72,7 @@ class MedicalCertificatesSeeder extends Seeder
             ],
             [
                 'reference' => 'MC-2026-006',
-                'patient' => 'John Paul Santos', 'patient_id' => '2023-0881',
+                'patient' => 'John Paul Santos', 'patient_id' => '23-010881',
                 'consultation_ref' => null,
                 'issued_by' => 'Nurse C. Villanueva',
                 'purpose' => 'Medical Clearance',
@@ -83,7 +83,7 @@ class MedicalCertificatesSeeder extends Seeder
             ],
             [
                 'reference' => 'MC-2026-007',
-                'patient' => 'Patricia Mae Garcia', 'patient_id' => '2024-0012',
+                'patient' => 'Patricia Mae Garcia', 'patient_id' => '24-010012',
                 'consultation_ref' => 'CONS-2026-005',
                 'issued_by' => 'Dr. S. Lopez',
                 'purpose' => 'School Requirement — Medical Certificate',
@@ -94,7 +94,7 @@ class MedicalCertificatesSeeder extends Seeder
             ],
             [
                 'reference' => 'MC-2026-008',
-                'patient' => 'Angela Reyes', 'patient_id' => '2023-0104',
+                'patient' => 'Angela Reyes', 'patient_id' => '24-021128',
                 'consultation_ref' => 'CONS-2026-001',
                 'issued_by' => '',
                 'requested_by' => 'Nurse C. Villanueva',
@@ -106,7 +106,7 @@ class MedicalCertificatesSeeder extends Seeder
             ],
             [
                 'reference' => 'MC-2026-009',
-                'patient' => 'Joanna Lim', 'patient_id' => '2021-1122',
+                'patient' => 'Joanna Lim', 'patient_id' => '21-011122',
                 'consultation_ref' => 'CONS-2026-002',
                 'issued_by' => '',
                 'requested_by' => 'Nurse C. Villanueva',
@@ -120,7 +120,7 @@ class MedicalCertificatesSeeder extends Seeder
             ],
             [
                 'reference' => 'MC-2026-010',
-                'patient' => 'Mark Dela Cruz', 'patient_id' => '2022-0941',
+                'patient' => 'Mark Dela Cruz', 'patient_id' => '22-010941',
                 'consultation_ref' => null,
                 'issued_by' => '',
                 'requested_by' => 'Nurse C. Villanueva',

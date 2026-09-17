@@ -22,7 +22,7 @@ class PatientFactory extends Factory
 
         return [
             'patient_id' => match ($type) {
-                'Student' => (string) fake()->numberBetween(2020, 2024).'-'.str_pad((string) fake()->unique()->numberBetween(100, 999), 4, '0', STR_PAD_LEFT),
+                'Student' => fake()->numberBetween(20, 25).'-'.str_pad((string) fake()->unique()->numberBetween(10000, 999999), 6, '0', STR_PAD_LEFT),
                 default => 'EMP-'.str_pad((string) fake()->unique()->numberBetween(100, 999), 3, '0', STR_PAD_LEFT),
             },
             'name' => $name,
@@ -43,8 +43,8 @@ class PatientFactory extends Factory
                     'Student Affairs', 'IT Department',
                 ]),
             },
-            'contact' => '09'.fake()->numerify('##-###-####'),
-            'emergency_contact' => fake()->name().' ('.fake()->randomElement(['Mother', 'Father', 'Spouse', 'Sibling']).') - 09'.fake()->numerify('##-###-####'),
+            'contact' => '+63 9'.fake()->numerify('## ### ####'),
+            'emergency_contact' => fake()->name().' ('.fake()->randomElement(['Mother', 'Father', 'Spouse', 'Sibling']).') - +63 9'.fake()->numerify('## ### ####'),
             'allergies' => fake()->randomElement(['None', 'Peanuts', 'Penicillin', 'Seafood', 'Sulfa drugs', 'Dust Mites', 'Aspirin']),
             'history' => fake()->randomElement(['None', 'Mild Asthma', 'Migraines', 'GERD', 'Allergic Rhinitis', 'Hypertension', 'Eczema']),
             'status' => fake()->randomElement(['Active', 'Active', 'Active', 'Inactive']),

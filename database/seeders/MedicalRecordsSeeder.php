@@ -14,9 +14,9 @@ class MedicalRecordsSeeder extends Seeder
 
         $records = [
             [
-                'patient_id' => '2023-0104', 'name' => 'Angela Reyes', 'age' => 20, 'sex' => 'Female',
-                'type' => 'Student', 'course_dept' => 'BS Computer Science', 'contact' => '0912-345-6789',
-                'emergency_contact' => 'Maria Reyes (Mother) — 0912-345-6780', 'status' => 'Active',
+                'patient_id' => '24-021128', 'name' => 'Angela Reyes', 'age' => 20, 'sex' => 'Female',
+                'type' => 'Student', 'course_dept' => 'BS Computer Science', 'contact' => '+63 912 345 6789',
+                'emergency_contact' => 'Maria Reyes (Mother) — +63 912 345 6780', 'status' => 'Active',
                 'last_updated' => '2026-08-05',
                 'histories' => [
                     ['date' => '2025-06-10', 'condition' => 'Allergic Rhinitis', 'notes' => 'Recurring seasonal symptoms; managed with antihistamines.'],
@@ -37,9 +37,9 @@ class MedicalRecordsSeeder extends Seeder
                 ],
             ],
             [
-                'patient_id' => '2022-0941', 'name' => 'Mark Dela Cruz', 'age' => 21, 'sex' => 'Male',
-                'type' => 'Student', 'course_dept' => 'BS Information Technology', 'contact' => '0922-876-5432',
-                'emergency_contact' => 'Tomas Dela Cruz (Father) — 0922-876-5431', 'status' => 'Active',
+                'patient_id' => '22-010941', 'name' => 'Mark Dela Cruz', 'age' => 21, 'sex' => 'Male',
+                'type' => 'Student', 'course_dept' => 'BS Information Technology', 'contact' => '+63 922 876 5432',
+                'emergency_contact' => 'Tomas Dela Cruz (Father) — +63 922 876 5431', 'status' => 'Active',
                 'last_updated' => '2026-08-03',
                 'histories' => [
                     ['date' => '2023-02-20', 'condition' => 'Gastroesophageal reflux disease (GERD)', 'notes' => 'Managed with dietary changes and proton pump inhibitors.'],
@@ -55,9 +55,9 @@ class MedicalRecordsSeeder extends Seeder
                 ],
             ],
             [
-                'patient_id' => '2021-1122', 'name' => 'Joanna Lim', 'age' => 23, 'sex' => 'Female',
-                'type' => 'Student', 'course_dept' => 'BEED Elementary Education', 'contact' => '0933-222-1111',
-                'emergency_contact' => 'Lim Sian (Father) — 0933-222-0000', 'status' => 'Active',
+                'patient_id' => '21-011122', 'name' => 'Joanna Lim', 'age' => 23, 'sex' => 'Female',
+                'type' => 'Student', 'course_dept' => 'BEED Elementary Education', 'contact' => '+63 933 222 1111',
+                'emergency_contact' => 'Lim Sian (Father) — +63 933 222 0000', 'status' => 'Active',
                 'last_updated' => '2026-08-04',
                 'histories' => [
                     ['date' => '2025-06-10', 'condition' => 'Allergic Rhinitis', 'notes' => 'Seasonal; controlled with oral antihistamines.'],
@@ -77,8 +77,8 @@ class MedicalRecordsSeeder extends Seeder
             ],
             [
                 'patient_id' => 'EMP-119', 'name' => 'Susan Clave', 'age' => 45, 'sex' => 'Female',
-                'type' => 'Staff', 'course_dept' => 'Registrar Office', 'contact' => '0955-456-7890',
-                'emergency_contact' => 'Robert Clave (Husband) — 0955-456-7891', 'status' => 'Active',
+                'type' => 'Staff', 'course_dept' => 'Registrar Office', 'contact' => '+63 955 456 7890',
+                'emergency_contact' => 'Robert Clave (Husband) — +63 955 456 7891', 'status' => 'Active',
                 'last_updated' => '2026-07-29',
                 'histories' => [
                     ['date' => '2025-07-10', 'condition' => 'Right ankle sprain', 'notes' => 'Recovered with R.I.C.E. protocol and physiotherapy.'],
@@ -95,9 +95,9 @@ class MedicalRecordsSeeder extends Seeder
                 ],
             ],
             [
-                'patient_id' => '2023-0881', 'name' => 'John Paul Santos', 'age' => 20, 'sex' => 'Male',
-                'type' => 'Student', 'course_dept' => 'BS Business Administration', 'contact' => '0977-123-4567',
-                'emergency_contact' => 'Lorna Santos (Mother) — 0977-123-4568', 'status' => 'Active',
+                'patient_id' => '23-010881', 'name' => 'John Paul Santos', 'age' => 20, 'sex' => 'Male',
+                'type' => 'Student', 'course_dept' => 'BS Business Administration', 'contact' => '+63 977 123 4567',
+                'emergency_contact' => 'Lorna Santos (Mother) — +63 977 123 4568', 'status' => 'Active',
                 'last_updated' => '2026-08-01',
                 'histories' => [
                     ['date' => '2024-07-19', 'condition' => 'Dengue fever', 'notes' => 'Hospitalized for observation; platelet count normalized.'],
@@ -111,9 +111,9 @@ class MedicalRecordsSeeder extends Seeder
                 ],
             ],
             [
-                'patient_id' => '2024-0012', 'name' => 'Patricia Mae Garcia', 'age' => 19, 'sex' => 'Female',
-                'type' => 'Student', 'course_dept' => 'BS Hospitality Management', 'contact' => '0998-765-4321',
-                'emergency_contact' => 'Leon Garcia (Father) — 0998-765-4320', 'status' => 'Active',
+                'patient_id' => '24-010012', 'name' => 'Patricia Mae Garcia', 'age' => 19, 'sex' => 'Female',
+                'type' => 'Student', 'course_dept' => 'BS Hospitality Management', 'contact' => '+63 998 765 4321',
+                'emergency_contact' => 'Leon Garcia (Father) — +63 998 765 4320', 'status' => 'Active',
                 'last_updated' => '2026-07-28',
                 'histories' => [
                     ['date' => '2024-01-30', 'condition' => 'Eczema', 'notes' => 'Recurring dry patches on arms; controlled with moisturizers.'],
@@ -133,8 +133,8 @@ class MedicalRecordsSeeder extends Seeder
             ],
             [
                 'patient_id' => 'EMP-042', 'name' => 'Dr. Alberto Ruiz', 'age' => 48, 'sex' => 'Male',
-                'type' => 'Faculty', 'course_dept' => 'College of Engineering', 'contact' => '0944-123-9876',
-                'emergency_contact' => 'Elena Ruiz (Wife) — 0944-123-9870', 'status' => 'Active',
+                'type' => 'Faculty', 'course_dept' => 'College of Engineering', 'contact' => '+63 944 123 9876',
+                'emergency_contact' => 'Elena Ruiz (Wife) — +63 944 123 9870', 'status' => 'Active',
                 'last_updated' => '2026-07-15',
                 'histories' => [
                     ['date' => '2022-03-14', 'condition' => 'Hypertension', 'notes' => 'Lifestyle modification and daily medication; monitored regularly.'],

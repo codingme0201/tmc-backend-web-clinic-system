@@ -23,7 +23,7 @@ class ConsultationsSeeder extends Seeder
             ],
             [
                 'reference' => 'CONS-2026-011', 'date' => '2026-08-04', 'time' => '10:30 AM',
-                'patient' => 'Joanna Lim', 'patient_id' => '2021-1122', 'staff' => 'Nurse C. Villanueva',
+                'patient' => 'Joanna Lim', 'patient_id' => '21-011122', 'staff' => 'Nurse C. Villanueva',
                 'status' => 'Scheduled', 'chief_complaint' => 'Skin rash on forearms, possible contact dermatitis',
                 'vitals' => ['temperature' => '', 'bloodPressure' => '', 'pulseRate' => '', 'respiratoryRate' => '', 'height' => '', 'weight' => ''],
                 'clinical_findings' => '', 'diagnosis' => '', 'treatment' => '', 'disposition' => '',
@@ -31,7 +31,7 @@ class ConsultationsSeeder extends Seeder
             ],
             [
                 'reference' => 'CONS-2026-012', 'date' => '2026-08-05', 'time' => '01:00 PM',
-                'patient' => 'Angela Reyes', 'patient_id' => '2023-0104', 'staff' => 'Dr. R. Mendoza',
+                'patient' => 'Angela Reyes', 'patient_id' => '24-021128', 'staff' => 'Dr. R. Mendoza',
                 'status' => 'Scheduled', 'chief_complaint' => 'Migraine management plan review',
                 'vitals' => ['temperature' => '', 'bloodPressure' => '', 'pulseRate' => '', 'respiratoryRate' => '', 'height' => '', 'weight' => ''],
                 'clinical_findings' => '', 'diagnosis' => '', 'treatment' => '', 'disposition' => '',
@@ -39,7 +39,7 @@ class ConsultationsSeeder extends Seeder
             ],
             [
                 'reference' => 'CONS-2026-013', 'date' => '2026-08-01', 'time' => '11:00 AM',
-                'patient' => 'John Paul Santos', 'patient_id' => '2023-0881', 'staff' => 'Nurse C. Villanueva',
+                'patient' => 'John Paul Santos', 'patient_id' => '23-010881', 'staff' => 'Nurse C. Villanueva',
                 'status' => 'In Progress', 'chief_complaint' => 'High fever (38.2°C) and body aches since morning',
                 'vitals' => ['temperature' => '38.2°C', 'bloodPressure' => '118/76', 'pulseRate' => '92 bpm', 'respiratoryRate' => '20 /min', 'height' => '168 cm', 'weight' => '61 kg'],
                 'clinical_findings' => 'Flushed skin, mild dehydration. Throat slightly red.',
@@ -48,7 +48,7 @@ class ConsultationsSeeder extends Seeder
             ],
             [
                 'reference' => 'CONS-2026-001', 'date' => '2026-07-30', 'time' => '08:45 AM',
-                'patient' => 'Angela Reyes', 'patient_id' => '2023-0104', 'staff' => 'Dr. R. Mendoza',
+                'patient' => 'Angela Reyes', 'patient_id' => '24-021128', 'staff' => 'Dr. R. Mendoza',
                 'status' => 'Completed', 'chief_complaint' => 'Severe headache and nausea for 2 days',
                 'vitals' => ['temperature' => '36.8°C', 'bloodPressure' => '110/70', 'pulseRate' => '72 bpm', 'respiratoryRate' => '16 /min', 'height' => '162 cm', 'weight' => '54 kg'],
                 'clinical_findings' => 'Mild pericranial muscle tenderness. No focal neurological deficits.',
@@ -59,7 +59,7 @@ class ConsultationsSeeder extends Seeder
             ],
             [
                 'reference' => 'CONS-2026-002', 'date' => '2026-07-30', 'time' => '10:15 AM',
-                'patient' => 'Joanna Lim', 'patient_id' => '2021-1122', 'staff' => 'Nurse C. Villanueva',
+                'patient' => 'Joanna Lim', 'patient_id' => '21-011122', 'staff' => 'Nurse C. Villanueva',
                 'status' => 'Completed', 'chief_complaint' => 'Slight fever and runny nose',
                 'vitals' => ['temperature' => '37.9°C', 'bloodPressure' => '120/80', 'pulseRate' => '84 bpm', 'respiratoryRate' => '18 /min', 'height' => '158 cm', 'weight' => '49 kg'],
                 'clinical_findings' => 'Congested nasal passages, mild pharyngeal erythema.',
@@ -70,7 +70,7 @@ class ConsultationsSeeder extends Seeder
             ],
             [
                 'reference' => 'CONS-2026-003', 'date' => '2026-07-29', 'time' => '02:00 PM',
-                'patient' => 'Mark Dela Cruz', 'patient_id' => '2022-0941', 'staff' => 'Dr. R. Mendoza',
+                'patient' => 'Mark Dela Cruz', 'patient_id' => '22-010941', 'staff' => 'Dr. R. Mendoza',
                 'status' => 'Completed', 'chief_complaint' => 'Acid reflux and burning sensation in chest',
                 'vitals' => ['temperature' => '36.5°C', 'bloodPressure' => '120/75', 'pulseRate' => '76 bpm', 'respiratoryRate' => '17 /min', 'height' => '173 cm', 'weight' => '68 kg'],
                 'clinical_findings' => 'Epigastric tenderness on palpation.',
@@ -92,7 +92,7 @@ class ConsultationsSeeder extends Seeder
             ],
             [
                 'reference' => 'CONS-2026-005', 'date' => '2026-07-28', 'time' => '09:15 AM',
-                'patient' => 'Patricia Mae Garcia', 'patient_id' => '2024-0012', 'staff' => 'Dr. S. Lopez',
+                'patient' => 'Patricia Mae Garcia', 'patient_id' => '24-010012', 'staff' => 'Dr. S. Lopez',
                 'status' => 'Completed', 'chief_complaint' => 'Persistent toothache on upper right molar',
                 'vitals' => ['temperature' => '36.9°C', 'bloodPressure' => '115/75', 'pulseRate' => '78 bpm', 'respiratoryRate' => '16 /min', 'height' => '165 cm', 'weight' => '55 kg'],
                 'clinical_findings' => 'Caries noted on upper right first molar.',

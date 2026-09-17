@@ -76,7 +76,7 @@ class UserSeeder extends Seeder
                 'email' => 'demo@tmccarelink.com',
                 'password' => 'Demo1234',
                 'role_id' => $patientRoleId,
-                'patient_id' => '2023-0104',
+                'patient_id' => '24-021128',
                 'status' => 'active',
             ],
             [
@@ -84,7 +84,7 @@ class UserSeeder extends Seeder
                 'email' => 'angela.reyes@tmc.edu.ph',
                 'password' => 'password',
                 'role_id' => $patientRoleId,
-                'patient_id' => '2023-0104',
+                'patient_id' => '24-021128',
                 'status' => 'active',
             ],
             [
@@ -92,7 +92,7 @@ class UserSeeder extends Seeder
                 'email' => 'mark.delacruz@tmc.edu.ph',
                 'password' => 'password',
                 'role_id' => $patientRoleId,
-                'patient_id' => '2022-0941',
+                'patient_id' => '22-010941',
                 'status' => 'active',
             ],
             [
@@ -100,7 +100,7 @@ class UserSeeder extends Seeder
                 'email' => 'joanna.lim@tmc.edu.ph',
                 'password' => 'password',
                 'role_id' => $patientRoleId,
-                'patient_id' => '2021-1122',
+                'patient_id' => '21-011122',
                 'status' => 'active',
             ],
         ];
