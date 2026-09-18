@@ -23,11 +23,9 @@ return [
     // development (same origin), and this allows direct cross-origin calls
     // from any localhost dev port. Add your deployed frontend origin here
     // (e.g. 'https://carelink.example.com') when serving the SPA separately.
-    'allowed_origins' => [],
+    'allowed_origins' => ['*'],
 
-    'allowed_origins_patterns' => [
-        '~^https?://(localhost|127\.0\.0\.1)(:\d+)?$~',
-    ],
+    'allowed_origins_patterns' => [],
 
     'allowed_headers' => ['*'],
 
