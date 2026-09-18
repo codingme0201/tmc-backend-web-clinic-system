@@ -40,6 +40,23 @@ class AuthController extends Controller
             return response()->json(['message' => 'This account has been deactivated. Please contact an administrator.'], 403);
         }
 
+        $client = $credentials['client'] ?? $request->header('X-Client-Platform');
+        if ($client === 'web' && $user->role?->name === 'patient') {
+            return response()->json([
+                'message' => 'Patient accounts can only access TMC CareLink via the mobile application. Only doctors, nurses, and administrators can enter the web clinic system.',
+                'code' => 'PATIENT_MOBILE_ONLY',
+                'role' => 'patient',
+            ], 403);
+        }
+
+        if ($client === 'mobile' && $user->role?->name !== 'patient') {
+            return response()->json([
+                'message' => 'This mobile app is for patient users only. Doctors, nurses, and administrators must log in through the web clinic portal.',
+                'code' => 'CLINIC_STAFF_WEB_ONLY',
+                'role' => $user->role?->name,
+            ], 403);
+        }
+
         $token = $user->createToken('tmc-carelink')->plainTextToken;
 
         return response()->json([

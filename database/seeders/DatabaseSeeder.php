@@ -17,13 +17,13 @@ class DatabaseSeeder extends Seeder
         $this->call(SystemSettingSeeder::class);
         $this->call(PatientsSeeder::class);
 
-        $staffRoleId = Role::where('name', 'staff')->value('id');
+        $doctorRoleId = Role::where('name', 'doctor')->value('id');
         $adminRoleId = Role::where('name', 'admin')->value('id');
 
         User::firstOrCreate(['email' => 'test@example.com'], [
             'name' => 'Test User',
             'password' => 'password',
-            'role_id' => $staffRoleId,
+            'role_id' => $doctorRoleId,
         ]);
 
         User::firstOrCreate(['email' => 'admin@tmc.edu.ph'], [

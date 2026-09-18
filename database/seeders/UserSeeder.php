@@ -17,8 +17,7 @@ class UserSeeder extends Seeder
         $adminRoleId = Role::where('name', 'admin')->value('id');
         $doctorRoleId = Role::where('name', 'doctor')->value('id');
         $nurseRoleId = Role::where('name', 'nurse')->value('id');
-        $staffRoleId = Role::where('name', 'staff')->value('id');
-        $patientRoleId = Role::where('name', 'patient')->value('id') ?? $staffRoleId;
+        $patientRoleId = Role::where('name', 'patient')->value('id');
 
         $users = [
             [
@@ -36,10 +35,10 @@ class UserSeeder extends Seeder
                 'status' => 'active',
             ],
             [
-                'name' => 'Maria Santos',
+                'name' => 'Nurse Maria Santos',
                 'email' => 'msantos@tmc.edu.ph',
                 'password' => 'password',
-                'role_id' => $staffRoleId,
+                'role_id' => $nurseRoleId,
                 'status' => 'active',
             ],
             [

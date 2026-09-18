@@ -134,8 +134,9 @@ class RolesAndPermissionsSeeder extends Seeder
         // Doctor: clinical care + records.
         $doctor = Role::firstOrCreate(
             ['name' => 'doctor'],
-            ['description' => 'Doctor — clinical care and records'],
+            ['description' => 'Doctor — clinical care and records', 'is_system' => true],
         );
+        $doctor->update(['is_system' => true]);
         $doctor->permissions()->sync(Permission::whereIn('name', [
             'dashboard.view',
             'appointments.view',
@@ -155,8 +156,9 @@ class RolesAndPermissionsSeeder extends Seeder
         // Nurse: clinic care support.
         $nurse = Role::firstOrCreate(
             ['name' => 'nurse'],
-            ['description' => 'Nurse — clinic care support'],
+            ['description' => 'Nurse — clinic care support', 'is_system' => true],
         );
+        $nurse->update(['is_system' => true]);
         $nurse->permissions()->sync(Permission::whereIn('name', [
             'dashboard.view',
             'appointments.view', 'appointments.create',
@@ -171,28 +173,22 @@ class RolesAndPermissionsSeeder extends Seeder
             'notifications.view',
         ])->pluck('id'));
 
-        // Staff: general staff read access.
-        $staff = Role::firstOrCreate(
-            ['name' => 'staff'],
-            ['description' => 'Staff — general clinic staff'],
-        );
-        $staff->permissions()->sync(Permission::whereIn('name', [
-            'dashboard.view',
-            'appointments.view',
-            'patients.view',
-            'schedules.view',
-            'calendar.view',
-            'audit_logs.view',
-            'notifications.view',
-        ])->pluck('id'));
-
-        // Patient: mobile/portal patient self-service.
+        // Patient: mobile app self-service.
         $patientRole = Role::firstOrCreate(
             ['name' => 'patient'],
-            ['description' => 'Patient — student or faculty self-service access'],
+            ['description' => 'Patient — student or faculty mobile access', 'is_system' => true],
         );
+        $patientRole->update(['is_system' => true]);
 
-        // Any user still without a role defaults to the least-privilege role.
-        User::whereNull('role_id')->update(['role_id' => $staff->id]);
+        // Clean up legacy staff role if present.
+        $legacyStaff = Role::where('name', 'staff')->first();
+        if ($legacyStaff) {
+            User::where('role_id', $legacyStaff->id)->update(['role_id' => $nurse->id]);
+            $legacyStaff->permissions()->detach();
+            $legacyStaff->delete();
+        }
+
+        // Any user still without a role defaults to patient.
+        User::whereNull('role_id')->update(['role_id' => $patientRole->id]);
     }
 }

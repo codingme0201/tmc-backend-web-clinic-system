@@ -145,6 +145,17 @@ class RolesAndPermissionsTest extends TestCase
             ->assertJsonValidationErrors(['name']);
     }
 
+    public function test_role_name_cannot_be_staff(): void
+    {
+        $admin = $this->adminUser();
+
+        $this->actingAsUser($admin);
+
+        $this->postJson('/api/roles', ['name' => 'staff', 'description' => 'Staff'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['name']);
+    }
+
     // --- Update role -----------------------------------------------------------
 
     public function test_admin_can_update_role_information_and_permissions(): void

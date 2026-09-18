@@ -38,6 +38,70 @@ class AuthTest extends TestCase
             ->assertJsonPath('user.role', 'admin');
     }
 
+    public function test_patient_login_on_web_is_forbidden_with_mobile_only_notice(): void
+    {
+        $patientRole = Role::firstOrCreate(['name' => 'patient'], ['description' => 'Patient']);
+        User::factory()->create([
+            'email' => 'patient@tmc.edu.ph',
+            'password' => 'password123',
+            'role_id' => $patientRole->id,
+            'status' => 'active',
+        ]);
+
+        $response = $this->postJson('/api/login', [
+            'email' => 'patient@tmc.edu.ph',
+            'password' => 'password123',
+            'client' => 'web',
+        ]);
+
+        $response->assertForbidden()
+            ->assertJsonPath('code', 'PATIENT_MOBILE_ONLY')
+            ->assertJsonPath('role', 'patient');
+    }
+
+    public function test_patient_login_on_mobile_succeeds(): void
+    {
+        $patientRole = Role::firstOrCreate(['name' => 'patient'], ['description' => 'Patient']);
+        User::factory()->create([
+            'email' => 'patient@tmc.edu.ph',
+            'password' => 'password123',
+            'role_id' => $patientRole->id,
+            'status' => 'active',
+        ]);
+
+        $response = $this->postJson('/api/login', [
+            'email' => 'patient@tmc.edu.ph',
+            'password' => 'password123',
+            'client' => 'mobile',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonStructure(['token', 'user'])
+            ->assertJsonPath('user.email', 'patient@tmc.edu.ph')
+            ->assertJsonPath('user.role', 'patient');
+    }
+
+    public function test_clinic_staff_login_on_mobile_is_forbidden_with_web_only_notice(): void
+    {
+        $doctorRole = Role::firstOrCreate(['name' => 'doctor'], ['description' => 'Doctor']);
+        User::factory()->create([
+            'email' => 'doctor@tmc.edu.ph',
+            'password' => 'doctor123',
+            'role_id' => $doctorRole->id,
+            'status' => 'active',
+        ]);
+
+        $response = $this->postJson('/api/login', [
+            'email' => 'doctor@tmc.edu.ph',
+            'password' => 'doctor123',
+            'client' => 'mobile',
+        ]);
+
+        $response->assertForbidden()
+            ->assertJsonPath('code', 'CLINIC_STAFF_WEB_ONLY')
+            ->assertJsonPath('role', 'doctor');
+    }
+
     public function test_login_response_never_exposes_the_password(): void
     {
         $user = $this->createUser();
