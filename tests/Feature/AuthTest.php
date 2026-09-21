@@ -197,4 +197,33 @@ class AuthTest extends TestCase
     {
         $this->postJson('/api/logout')->assertUnauthorized();
     }
+
+    public function test_patient_registration_creates_account_and_returns_token(): void
+    {
+        $response = $this->postJson('/api/register', [
+            'name' => 'Maria Clara',
+            'email' => 'maria.clara@tmc.edu.ph',
+            'password' => 'secret123',
+            'student_id' => '24-998877',
+            'type' => 'Student',
+            'course_dept' => 'BS Nursing',
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonStructure(['token', 'user' => ['id', 'name', 'email', 'role', 'patientId']])
+            ->assertJsonPath('user.email', 'maria.clara@tmc.edu.ph')
+            ->assertJsonPath('user.role', 'patient')
+            ->assertJsonPath('user.patientId', '24-998877');
+
+        $this->assertDatabaseHas('users', ['email' => 'maria.clara@tmc.edu.ph']);
+        $this->assertDatabaseHas('patients', ['patient_id' => '24-998877', 'name' => 'Maria Clara']);
+    }
+
+    public function test_forgot_password_returns_acknowledgement(): void
+    {
+        $this->postJson('/api/forgot-password', [
+            'email' => 'nonexistent@tmc.edu.ph',
+        ])->assertOk()
+          ->assertJsonStructure(['message']);
+    }
 }

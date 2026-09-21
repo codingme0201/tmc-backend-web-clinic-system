@@ -71,6 +71,7 @@ class UserController extends Controller
             'password' => $validated['password'],
             'role_id' => $validated['role_id'],
             'status' => $validated['status'] ?? 'active',
+            'patient_id' => $validated['patient_id'] ?? null,
         ]);
 
         $user->load('role');
@@ -88,6 +89,7 @@ class UserController extends Controller
         $user->update([
             'name' => $validated['name'] ?? $user->name,
             'email' => $validated['email'] ?? $user->email,
+            'patient_id' => array_key_exists('patient_id', $validated) ? $validated['patient_id'] : $user->patient_id,
         ]);
 
         return new UserResource($user->fresh('role'));

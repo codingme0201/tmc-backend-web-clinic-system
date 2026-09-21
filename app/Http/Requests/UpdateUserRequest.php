@@ -27,6 +27,7 @@ class UpdateUserRequest extends FormRequest
         return [
             'name' => ['sometimes', 'string', 'max:255'],
             'email' => ['sometimes', 'string', 'email', 'max:255', Rule::unique('users', 'email')->ignore($userId)],
+            'patient_id' => ['nullable', 'string', 'max:50', 'exists:patients,patient_id'],
         ];
     }
 }

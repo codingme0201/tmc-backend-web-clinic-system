@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\LoginRequest;
+use App\Models\Patient;
+use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -104,6 +106,73 @@ class AuthController extends Controller
         ]);
 
         return response()->json(['message' => 'Password updated successfully.']);
+    }
+
+    /**
+     * Register a new patient user account.
+     */
+    public function register(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
+            'password' => ['required', 'string', 'min:6'],
+            'patient_id' => ['nullable', 'string', 'max:50'],
+            'student_id' => ['nullable', 'string', 'max:50'],
+            'type' => ['nullable', 'string', 'max:50'],
+            'course_dept' => ['nullable', 'string', 'max:100'],
+            'contact' => ['nullable', 'string', 'max:50'],
+        ]);
+
+        $patientId = $validated['patient_id'] ?? $validated['student_id'] ?? null;
+
+        if (! $patientId) {
+            $patientId = 'STU-' . date('y') . '-' . str_pad((string) mt_rand(1, 999999), 6, '0', STR_PAD_LEFT);
+        }
+
+        $patient = Patient::firstOrCreate(
+            ['patient_id' => $patientId],
+            [
+                'name' => $validated['name'],
+                'type' => $validated['type'] ?? 'Student',
+                'course_dept' => $validated['course_dept'] ?? 'General',
+                'contact' => $validated['contact'] ?? '',
+                'status' => 'Active',
+            ]
+        );
+
+        $patientRole = Role::firstOrCreate(['name' => 'patient'], ['description' => 'Patient']);
+
+        $user = User::create([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'password' => $validated['password'],
+            'role_id' => $patientRole->id,
+            'patient_id' => $patient->patient_id,
+            'status' => 'active',
+        ]);
+
+        $token = $user->createToken('tmc-carelink')->plainTextToken;
+
+        return response()->json([
+            'token' => $token,
+            'user' => $this->userPayload($user),
+            'message' => 'Registration successful.',
+        ], 201);
+    }
+
+    /**
+     * Handle forgot password reset request.
+     */
+    public function forgotPassword(Request $request): JsonResponse
+    {
+        $request->validate([
+            'email' => ['required', 'string', 'email'],
+        ]);
+
+        return response()->json([
+            'message' => 'If an account exists with this email address, password reset instructions will be sent.',
+        ]);
     }
 
     /**

@@ -32,6 +32,7 @@ class StoreUserRequest extends FormRequest
             'password' => ['required', 'string', 'min:8', 'confirmed'],
             'role_id' => ['required', 'integer', 'exists:roles,id'],
             'status' => ['sometimes', 'string', Rule::in(['active', 'inactive'])],
+            'patient_id' => ['nullable', 'string', 'max:50', 'exists:patients,patient_id'],
         ];
     }
 }

@@ -8,6 +8,7 @@ use App\Http\Requests\UpdateAppointmentStatusRequest;
 use App\Http\Resources\AppointmentResource;
 use App\Models\Appointment;
 use App\Models\Notification;
+use App\Models\UnavailableSchedule;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -53,6 +54,15 @@ class AppointmentController extends Controller
             'time' => ['required', 'string'],
             'staff' => ['nullable', 'string'],
         ]);
+
+        if ($conflict = $this->checkAppointmentConflict(
+            $validated['date'],
+            $validated['time'],
+            $validated['staff'] ?? null,
+            $patient->patient_id
+        )) {
+            return $conflict;
+        }
 
         $appointment = DB::transaction(function () use ($request, $validated, $patient) {
             $staffName = $validated['staff'] ?? '';
@@ -130,6 +140,16 @@ class AppointmentController extends Controller
         $date = $validated['date'];
         $time = $validated['time'];
         $reason = $validated['reason'] ?? '';
+
+        if ($conflict = $this->checkAppointmentConflict(
+            $date,
+            $time,
+            $appointment->staff,
+            $patient->patient_id,
+            $appointment->id
+        )) {
+            return $conflict;
+        }
 
         $rescheduleNote = sprintf(
             'Patient requested reschedule from %s %s to %s %s%s',
@@ -237,6 +257,15 @@ class AppointmentController extends Controller
     {
         $validated = $request->validated();
 
+        if ($conflict = $this->checkAppointmentConflict(
+            $validated['date'],
+            $validated['time'],
+            $validated['staff'] ?? null,
+            $validated['patient_id'] ?? null
+        )) {
+            return $conflict;
+        }
+
         // Locked reference generation inside a transaction so concurrent
         // bookings can never produce a duplicate reference.
         $appointment = DB::transaction(function () use ($request, $validated) {
@@ -322,6 +351,16 @@ class AppointmentController extends Controller
         $date = $request->validated('date');
         $time = $request->validated('time');
         $note = $request->validated('note');
+
+        if ($conflict = $this->checkAppointmentConflict(
+            $date,
+            $time,
+            $appointment->staff,
+            $appointment->patient_id,
+            $appointment->id
+        )) {
+            return $conflict;
+        }
 
         $rescheduleNote = sprintf(
             'Rescheduled from %s %s to %s %s%s',
@@ -449,5 +488,72 @@ class AppointmentController extends Controller
                 'metadata' => ['appointment_reference' => $appointment->reference],
             ]);
         }
+    }
+
+    /**
+     * Check if an appointment booking collides with an existing appointment
+     * or a blocked clinic/doctor schedule.
+     */
+    protected function checkAppointmentConflict(
+        string $date,
+        string $time,
+        ?string $staff = null,
+        ?string $patientId = null,
+        ?int $ignoreAppointmentId = null
+    ): ?JsonResponse {
+        // 1. Check if the clinic schedule is blocked in UnavailableSchedule
+        $isBlocked = UnavailableSchedule::where('start_date', '<=', $date)
+            ->where('end_date', '>=', $date)
+            ->where(function ($q) use ($time) {
+                $q->where('all_day', true)
+                    ->orWhere(function ($sub) use ($time) {
+                        $sub->whereNotNull('start_time')
+                            ->whereNotNull('end_time')
+                            ->where('start_time', '<=', $time)
+                            ->where('end_time', '>=', $time);
+                    });
+            })
+            ->exists();
+
+        if ($isBlocked) {
+            return response()->json([
+                'message' => 'The selected date or time slot is unavailable due to a clinic schedule block.',
+            ], 422);
+        }
+
+        // 2. Check if the staff/doctor already has an active appointment at that date & time
+        $cleanStaff = trim((string) $staff);
+        if ($cleanStaff !== '' && strtolower($cleanStaff) !== 'any available') {
+            $staffConflict = Appointment::where('date', $date)
+                ->where('time', $time)
+                ->where('staff', $cleanStaff)
+                ->whereIn('status', ['Pending', 'Under Review', 'Approved', 'Rescheduled'])
+                ->when($ignoreAppointmentId, fn ($q) => $q->where('id', '!=', $ignoreAppointmentId))
+                ->exists();
+
+            if ($staffConflict) {
+                return response()->json([
+                    'message' => "The selected doctor/staff ({$cleanStaff}) already has an appointment booked on {$date} at {$time}.",
+                ], 422);
+            }
+        }
+
+        // 3. Check if the patient already has an active appointment at that date & time
+        if ($patientId) {
+            $patientConflict = Appointment::where('date', $date)
+                ->where('time', $time)
+                ->where('patient_id', $patientId)
+                ->whereIn('status', ['Pending', 'Under Review', 'Approved', 'Rescheduled'])
+                ->when($ignoreAppointmentId, fn ($q) => $q->where('id', '!=', $ignoreAppointmentId))
+                ->exists();
+
+            if ($patientConflict) {
+                return response()->json([
+                    'message' => "You already have an appointment scheduled for {$date} at {$time}.",
+                ], 422);
+            }
+        }
+
+        return null;
     }
 }
