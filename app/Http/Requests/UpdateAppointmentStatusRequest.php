@@ -28,7 +28,7 @@ class UpdateAppointmentStatusRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'status' => ['required', Rule::in(['Under Review', 'Approved', 'Rejected', 'Cancelled', 'Completed'])],
+            'status' => ['required', Rule::in(['Under Review', 'Approved', 'Confirmed', 'Rejected', 'Cancelled', 'Completed', 'No-Show'])],
             'note' => ['nullable', 'string', 'max:1000'],
         ];
     }

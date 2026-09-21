@@ -100,8 +100,8 @@ class ConsultationController extends Controller
     {
         $validated = $request->validated();
 
-        $today = now()->toDateString();
-        $nowTime = now()->format('h:i A');
+        $today = $validated['date'] ?? now()->toDateString();
+        $nowTime = $validated['time'] ?? now()->format('h:i A');
 
         $vitals = $validated['vitals'] ?? [];
         $vitals = [
@@ -113,28 +113,33 @@ class ConsultationController extends Controller
             'weight' => $vitals['weight'] ?? '',
         ];
 
-        $consultation = DB::transaction(function () use ($validated, $today, $nowTime, $vitals) {
+        // Status defaults to 'Scheduled' unless explicitly specified or already has diagnosis
+        $status = $validated['status'] ?? (!empty($validated['diagnosis']) ? 'Completed' : 'Scheduled');
+
+        $consultation = DB::transaction(function () use ($validated, $today, $nowTime, $vitals, $status) {
             $staffName = $validated['staff'] ?? '';
             $staffId = $staffName ? User::where('name', $staffName)->value('id') : null;
+
+            $patientId = $validated['patient_id'] ?? \App\Models\Patient::where('name', $validated['patient'])->value('patient_id');
 
             return Consultation::create([
                 'reference' => Consultation::nextReference($today, true),
                 'date' => $today,
                 'time' => $nowTime,
                 'patient' => $validated['patient'],
-                'patient_id' => $validated['patient_id'] ?? null,
+                'patient_id' => $patientId,
                 'appointment_id' => $validated['appointment_id'] ?? null,
                 'staff_id' => $staffId,
                 'staff' => $validated['staff'] ?? '',
-                'status' => 'Completed',
+                'status' => $status,
                 'chief_complaint' => $validated['chiefComplaint'] ?? $validated['symptoms'] ?? '',
                 'vitals' => $vitals,
                 'clinical_findings' => $validated['clinicalFindings'] ?? '',
                 'diagnosis' => $validated['diagnosis'] ?? '',
                 'treatment' => $validated['treatment'] ?? '',
                 'disposition' => $validated['disposition'] ?? '',
-                'started_at' => $validated['startedAt'] ?? "$today $nowTime",
-                'completed_at' => $validated['completedAt'] ?? "$today $nowTime",
+                'started_at' => $validated['startedAt'] ?? ($status === 'In Progress' ? "$today $nowTime" : ($status === 'Completed' ? "$today $nowTime" : null)),
+                'completed_at' => $validated['completedAt'] ?? ($status === 'Completed' ? "$today $nowTime" : null),
             ]);
         });
 

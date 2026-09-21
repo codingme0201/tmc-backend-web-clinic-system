@@ -280,6 +280,9 @@ class AppointmentController extends Controller
     public function updateStatus(Appointment $appointment, UpdateAppointmentStatusRequest $request): AppointmentResource|JsonResponse
     {
         $status = $request->validated('status');
+        if ($status === 'Confirmed') {
+            $status = 'Approved';
+        }
 
         if (! $request->user()->hasPermission($this->statusPermission($status))) {
             abort(403, 'You do not have permission to perform this action.');
@@ -376,6 +379,7 @@ class AppointmentController extends Controller
             'Cancelled' => "Your appointment {$appointment->reference} ({$appointment->type}) has been cancelled.",
             'Completed' => "Your appointment {$appointment->reference} ({$appointment->type}) has been marked as completed.",
             'Under Review' => "Your appointment {$appointment->reference} ({$appointment->type}) is now under review.",
+            'No-Show' => "Your appointment {$appointment->reference} ({$appointment->type}) has been recorded as No-Show.",
         ];
 
         $message = $statusMessages[$status] ?? "Your appointment {$appointment->reference} status has been updated to {$status}.";

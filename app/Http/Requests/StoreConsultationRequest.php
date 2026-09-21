@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreConsultationRequest extends FormRequest
 {
@@ -33,6 +34,9 @@ class StoreConsultationRequest extends FormRequest
             'patient' => ['required', 'string', 'max:255'],
             'patient_id' => ['nullable', 'string', 'max:255'],
             'appointment_id' => ['nullable', 'integer', 'exists:appointments,id'],
+            'status' => ['nullable', 'string', Rule::in(['Scheduled', 'In Progress', 'Completed'])],
+            'date' => ['nullable', 'date'],
+            'time' => ['nullable', 'string', 'max:50'],
             'staff' => ['nullable', 'string', 'max:255'],
             'symptoms' => ['nullable', 'string'],
             'vitals' => ['nullable', 'array'],

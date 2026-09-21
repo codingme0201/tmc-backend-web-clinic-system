@@ -200,11 +200,23 @@ class CalendarController extends Controller
         $validated['created_by'] = $request->user()->id;
         $validated['all_day'] = $validated['all_day'] ?? true;
 
+        $startDate = $validated['start_date'];
+        $endDate = $validated['end_date'] ?? $startDate;
+        $affectedCount = \App\Models\Appointment::whereBetween('date', [$startDate, $endDate])
+            ->whereIn('status', ['Pending', 'Under Review', 'Approved'])
+            ->count();
+
         $block = UnavailableSchedule::create($validated);
 
-        return (new UnavailableScheduleResource($block->load('creator')))
-            ->response()
-            ->setStatusCode(201);
+        $resource = (new UnavailableScheduleResource($block->load('creator')))
+            ->additional([
+                'meta' => [
+                    'affected_appointments_count' => $affectedCount,
+                    'warning' => $affectedCount > 0 ? "There are {$affectedCount} active appointment(s) scheduled during this blocked period." : null,
+                ],
+            ]);
+
+        return $resource->response()->setStatusCode(201);
     }
 
     /**

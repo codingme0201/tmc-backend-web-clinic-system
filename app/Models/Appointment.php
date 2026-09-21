@@ -22,7 +22,7 @@ class Appointment extends Model
      * Appointment lifecycle statuses, matching the existing frontend exactly.
      */
     public const STATUSES = [
-        'Pending', 'Under Review', 'Approved', 'Rescheduled', 'Rejected', 'Cancelled', 'Completed',
+        'Pending', 'Under Review', 'Approved', 'Rescheduled', 'Rejected', 'Cancelled', 'Completed', 'No-Show',
     ];
 
     /**
@@ -34,13 +34,14 @@ class Appointment extends Model
      * validates the new date/time.
      */
     public const TRANSITIONS = [
-        'Pending' => ['Under Review', 'Approved', 'Rejected', 'Cancelled'],
-        'Under Review' => ['Approved', 'Rejected', 'Cancelled', 'Completed'],
-        'Approved' => ['Cancelled', 'Completed'],
-        'Rescheduled' => ['Approved', 'Rejected', 'Cancelled'],
+        'Pending' => ['Under Review', 'Approved', 'Rejected', 'Cancelled', 'No-Show'],
+        'Under Review' => ['Approved', 'Rejected', 'Cancelled', 'Completed', 'No-Show'],
+        'Approved' => ['Cancelled', 'Completed', 'No-Show'],
+        'Rescheduled' => ['Approved', 'Rejected', 'Cancelled', 'No-Show'],
         'Rejected' => [],
         'Cancelled' => [],
         'Completed' => [],
+        'No-Show' => [],
     ];
 
     /**

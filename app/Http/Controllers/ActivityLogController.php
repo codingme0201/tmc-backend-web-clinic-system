@@ -47,8 +47,13 @@ class ActivityLogController extends Controller
             $query->whereDate('created_at', '<=', $to);
         }
 
+        // Filter for sensitive clinical/medical record activities
+        if ($request->boolean('clinical')) {
+            $query->whereIn('module', ['Medical Records', 'Consultations', 'Prescriptions', 'Medical Certificates']);
+        }
+
         // If no filters, apply the default limit for the Dashboard widget
-        $hasFilters = $request->hasAny(['search', 'module', 'user', 'from', 'to']);
+        $hasFilters = $request->hasAny(['search', 'module', 'user', 'from', 'to', 'clinical']);
         if (!$hasFilters) {
             $query->limit(50);
         }
