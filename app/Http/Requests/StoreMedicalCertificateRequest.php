@@ -19,6 +19,22 @@ class StoreMedicalCertificateRequest extends FormRequest
     }
 
     /**
+     * Prepare inputs for validation by normalizing camelCase keys.
+     */
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'patient_id' => $this->patient_id ?? $this->patientId,
+            'consultation_id' => $this->consultation_id ?? $this->consultationId,
+            'medical_record_id' => $this->medical_record_id ?? $this->medicalRecordId,
+            'issued_by' => $this->issued_by ?? $this->issuedBy,
+            'requested_by' => $this->requested_by ?? $this->requestedBy,
+            'issue_date' => $this->issue_date ?? $this->issueDate,
+            'valid_until' => $this->valid_until ?? $this->validUntil,
+        ]);
+    }
+
+    /**
      * Get the validation rules that apply to the request.
      *
      * @return array<string, ValidationRule|array<mixed>|string>

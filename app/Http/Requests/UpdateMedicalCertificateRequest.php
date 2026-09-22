@@ -19,6 +19,24 @@ class UpdateMedicalCertificateRequest extends FormRequest
     }
 
     /**
+     * Prepare inputs for validation by normalizing camelCase keys.
+     */
+    protected function prepareForValidation(): void
+    {
+        $merge = [];
+        if ($this->has('patientId')) $merge['patient_id'] = $this->patientId;
+        if ($this->has('consultationId')) $merge['consultation_id'] = $this->consultationId;
+        if ($this->has('medicalRecordId')) $merge['medical_record_id'] = $this->medicalRecordId;
+        if ($this->has('issuedBy')) $merge['issued_by'] = $this->issuedBy;
+        if ($this->has('issueDate')) $merge['issue_date'] = $this->issueDate;
+        if ($this->has('validUntil')) $merge['valid_until'] = $this->validUntil;
+
+        if (!empty($merge)) {
+            $this->merge($merge);
+        }
+    }
+
+    /**
      * Get the validation rules that apply to the request.
      *
      * Partial updates are allowed — only the provided fields are patched.
