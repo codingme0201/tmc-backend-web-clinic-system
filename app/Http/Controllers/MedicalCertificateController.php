@@ -91,23 +91,52 @@ class MedicalCertificateController extends Controller
             'diagnosis' => ['nullable', 'string'],
         ]);
 
+        // Enforce that the student must have an accomplished clinic consultation
+        $completedConsultations = \App\Models\Consultation::where(function ($q) use ($patient) {
+            $q->where('patient_id', $patient->patient_id)
+                ->orWhere('patient', $patient->name);
+        })->where('status', 'Completed')->latest('date')->get();
+
+        if ($completedConsultations->isEmpty()) {
+            return response()->json([
+                'message' => 'You must have an accomplished clinic consultation on file before requesting a medical certificate. Please visit the clinic or schedule a consultation first.',
+                'errors' => [
+                    'consultation' => ['A completed consultation is required before requesting a medical certificate.'],
+                ],
+            ], 422);
+        }
+
+        $targetConsultation = null;
+        if (! empty($validated['consultationId'])) {
+            $targetConsultation = $completedConsultations->firstWhere('id', (int) $validated['consultationId']);
+            if (! $targetConsultation) {
+                return response()->json([
+                    'message' => 'The selected consultation is not completed or does not belong to your record.',
+                    'errors' => [
+                        'consultationId' => ['A valid completed consultation is required.'],
+                    ],
+                ], 422);
+            }
+        } else {
+            $targetConsultation = $completedConsultations->first();
+        }
+
         $issueDate = now()->toDateString();
 
-        $certificate = DB::transaction(function () use ($request, $patient, $validated, $issueDate) {
-            $consultationId = $validated['consultationId'] ?? null;
+        $certificate = DB::transaction(function () use ($request, $patient, $validated, $targetConsultation, $issueDate) {
             $medicalRecord = \App\Models\MedicalRecord::where('patient_id', $patient->patient_id)->first();
 
             return MedicalCertificate::create([
                 'reference' => MedicalCertificate::nextReference($issueDate, true),
                 'patient' => $patient->name,
                 'patient_id' => $patient->patient_id,
-                'consultation_id' => $consultationId,
+                'consultation_id' => $targetConsultation->id,
                 'medical_record_id' => $medicalRecord?->id,
                 'requested_by_id' => $request->user()->id,
                 'requested_by' => $patient->name,
                 'issued_by' => '',
                 'purpose' => $validated['purpose'],
-                'diagnosis' => $validated['diagnosis'] ?? '',
+                'diagnosis' => ($validated['diagnosis'] ?? null) ?: ($targetConsultation->diagnosis ?: $targetConsultation->chief_complaint),
                 'recommendation' => '',
                 'issue_date' => $issueDate,
                 'status' => 'Pending',

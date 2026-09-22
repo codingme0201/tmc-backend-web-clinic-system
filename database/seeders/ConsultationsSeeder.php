@@ -81,7 +81,7 @@ class ConsultationsSeeder extends Seeder
             ],
             [
                 'reference' => 'CONS-2026-004', 'date' => '2026-07-29', 'time' => '11:30 AM',
-                'patient' => 'Susan Clave', 'patient_id' => 'EMP-119', 'staff' => 'Nurse C. Villanueva',
+                'patient' => 'Susan Clave', 'patient_id' => '23-010119', 'staff' => 'Nurse C. Villanueva',
                 'status' => 'Completed', 'chief_complaint' => 'Accidental slip, minor ankle sprain',
                 'vitals' => ['temperature' => '36.4°C', 'bloodPressure' => '130/80', 'pulseRate' => '88 bpm', 'respiratoryRate' => '18 /min', 'height' => '160 cm', 'weight' => '58 kg'],
                 'clinical_findings' => 'Mild swelling and tenderness over right lateral ankle.',

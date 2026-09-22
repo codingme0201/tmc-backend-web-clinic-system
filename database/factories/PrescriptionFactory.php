@@ -25,7 +25,7 @@ class PrescriptionFactory extends Factory
             ['name' => 'Angela Reyes', 'id' => '24-021128'],
             ['name' => 'Mark Dela Cruz', 'id' => '22-010941'],
             ['name' => 'Joanna Lim', 'id' => '21-011122'],
-            ['name' => 'Susan Clave', 'id' => 'EMP-119'],
+            ['name' => 'Susan Clave', 'id' => '23-010119'],
             ['name' => 'John Paul Santos', 'id' => '23-010881'],
             ['name' => 'Patricia Mae Garcia', 'id' => '24-010012'],
         ]);

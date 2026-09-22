@@ -44,7 +44,7 @@ class StoreMedicalCertificateRequest extends FormRequest
         return [
             'patient' => ['required', 'string', 'max:255'],
             'patient_id' => ['nullable', 'string', 'max:255'],
-            'consultation_id' => ['nullable', 'integer', 'exists:consultations,id'],
+            'consultation_id' => ['required', 'integer', 'exists:consultations,id'],
             'medical_record_id' => ['nullable', 'integer', 'exists:medical_records,id'],
             'issued_by' => ['nullable', 'string', 'max:255'],
             'requested_by' => ['nullable', 'string', 'max:255'],
@@ -54,5 +54,23 @@ class StoreMedicalCertificateRequest extends FormRequest
             'issue_date' => ['nullable', 'date'],
             'valid_until' => ['nullable', 'date', 'after_or_equal:issue_date'],
         ];
+    }
+
+    /**
+     * Configure the validator instance to enforce completed consultation status.
+     */
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator) {
+            if ($this->consultation_id) {
+                $consultation = \App\Models\Consultation::find($this->consultation_id);
+                if (! $consultation || $consultation->status !== 'Completed') {
+                    $validator->errors()->add(
+                        'consultation_id',
+                        'The consultation must be completed before a medical certificate can be requested or issued.'
+                    );
+                }
+            }
+        });
     }
 }

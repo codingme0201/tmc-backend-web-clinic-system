@@ -44,7 +44,7 @@ class PrescriptionsSeeder extends Seeder
                 ],
             ],
             [
-                'reference' => 'RX-2026-004', 'patient' => 'Susan Clave', 'patient_id' => 'EMP-119',
+                'reference' => 'RX-2026-004', 'patient' => 'Susan Clave', 'patient_id' => '23-010119',
                 'consultation_id' => $consultationId('CONS-2026-004'),
                 'prescribed_by' => 'Nurse C. Villanueva', 'prescription_date' => '2026-07-29',
                 'medications' => [

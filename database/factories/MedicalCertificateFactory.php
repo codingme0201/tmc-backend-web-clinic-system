@@ -22,7 +22,7 @@ class MedicalCertificateFactory extends Factory
         return [
             'reference' => 'MC-'.fake()->numberBetween(2024, 2026).'-'.str_pad((string) fake()->unique()->numberBetween(1, 999), 3, '0', STR_PAD_LEFT),
             'patient' => fake()->name(),
-            'patient_id' => fake()->randomElement([null, '2023-'.fake()->numberBetween(100, 999), 'EMP-'.fake()->numberBetween(100, 999)]),
+            'patient_id' => fake()->randomElement([null, '24-'.fake()->numerify('######'), '23-'.fake()->numerify('######')]),
             'consultation_id' => null,
             'medical_record_id' => null,
             'issued_by' => fake()->randomElement(['Dr. R. Mendoza', 'Dr. S. Lopez', 'Nurse C. Villanueva']),

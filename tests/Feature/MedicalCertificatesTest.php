@@ -78,6 +78,28 @@ class MedicalCertificatesTest extends TestCase
         ], $overrides));
     }
 
+    /** Build a completed consultation record for testing. */
+    private function makeCompletedConsultation(array $overrides = []): Consultation
+    {
+        return Consultation::create(array_merge([
+            'reference' => Consultation::nextReference('2026-08-08'),
+            'date' => '2026-08-08',
+            'time' => '09:00 AM',
+            'patient' => 'Test Patient',
+            'patient_id' => '2024-0100',
+            'staff' => 'Dr. R. Mendoza',
+            'status' => 'Completed',
+            'chief_complaint' => 'Fever',
+            'vitals' => [],
+            'clinical_findings' => 'Normal',
+            'diagnosis' => 'Mild Flu Symptoms',
+            'treatment' => 'Rest',
+            'disposition' => 'Sent Home',
+            'started_at' => '2026-08-08 09:05 AM',
+            'completed_at' => '2026-08-08 09:30 AM',
+        ], $overrides));
+    }
+
     // --- Authentication boundary -------------------------------------------
 
     public function test_certificate_endpoints_require_authentication(): void
@@ -183,11 +205,16 @@ class MedicalCertificatesTest extends TestCase
     public function test_admin_can_generate_certificate_with_defaults(): void
     {
         $admin = $this->adminUser();
+        $consultation = $this->makeCompletedConsultation([
+            'patient' => 'Rica Bautista',
+            'patient_id' => '2024-0100',
+        ]);
         $this->actingAsUser($admin);
 
         $this->postJson('/api/medical-certificates', [
             'patient' => 'Rica Bautista',
             'patient_id' => '2024-0100',
+            'consultation_id' => $consultation->id,
             'issued_by' => 'Dr. R. Mendoza',
             'purpose' => 'Medical Excuse — Clinic Visit',
             'diagnosis' => 'Mild Flu Symptoms',
@@ -195,6 +222,7 @@ class MedicalCertificatesTest extends TestCase
         ])
             ->assertCreated()
             ->assertJsonPath('data.patient', 'Rica Bautista')
+            ->assertJsonPath('data.consultationId', $consultation->id)
             ->assertJsonPath('data.status', 'Pending')
             ->assertJsonPath('data.requestedBy', self::ISSUER_NAME)
             ->assertJsonPath('data.purpose', 'Medical Excuse — Clinic Visit')
@@ -203,10 +231,36 @@ class MedicalCertificatesTest extends TestCase
 
         $this->assertDatabaseHas('medical_certificates', [
             'patient' => 'Rica Bautista',
+            'consultation_id' => $consultation->id,
             'reference' => 'MC-2026-001',
             'status' => 'Pending',
             'requested_by' => self::ISSUER_NAME,
         ]);
+    }
+
+    public function test_store_rejects_missing_or_uncompleted_consultation(): void
+    {
+        $admin = $this->adminUser();
+        $this->actingAsUser($admin);
+
+        // Missing consultation_id
+        $this->postJson('/api/medical-certificates', [
+            'patient' => 'Jane Doe',
+            'purpose' => 'Excuse',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['consultation_id']);
+
+        // Non-completed consultation (e.g. In Progress)
+        $inProgress = $this->makeCompletedConsultation(['status' => 'In Progress']);
+        $this->postJson('/api/medical-certificates', [
+            'patient' => 'Jane Doe',
+            'purpose' => 'Excuse',
+            'consultation_id' => $inProgress->id,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['consultation_id'])
+            ->assertJsonPath('errors.consultation_id.0', 'The consultation must be completed before a medical certificate can be requested or issued.');
     }
 
     public function test_generate_can_link_to_an_existing_consultation(): void
@@ -256,11 +310,13 @@ class MedicalCertificatesTest extends TestCase
     public function test_valid_until_cannot_precede_issue_date(): void
     {
         $admin = $this->adminUser();
+        $consultation = $this->makeCompletedConsultation();
         $this->actingAsUser($admin);
 
         $this->postJson('/api/medical-certificates', [
             'patient' => 'Bad Date',
             'purpose' => 'Clearance',
+            'consultation_id' => $consultation->id,
             'issue_date' => '2026-08-10',
             'valid_until' => '2026-08-09',
         ])
@@ -519,11 +575,86 @@ class MedicalCertificatesTest extends TestCase
     public function test_references_increment_sequentially_per_year(): void
     {
         $admin = $this->adminUser();
+        $c1 = $this->makeCompletedConsultation(['patient' => 'One', 'patient_id' => '2024-0001']);
+        $c2 = $this->makeCompletedConsultation(['patient' => 'Two', 'patient_id' => '2024-0002']);
         $this->actingAsUser($admin);
 
-        $this->postJson('/api/medical-certificates', ['patient' => 'One', 'purpose' => 'Excuse'])->assertCreated();
-        $this->postJson('/api/medical-certificates', ['patient' => 'Two', 'purpose' => 'Excuse'])
+        $this->postJson('/api/medical-certificates', [
+            'patient' => 'One',
+            'purpose' => 'Excuse',
+            'consultation_id' => $c1->id,
+        ])->assertCreated();
+
+        $this->postJson('/api/medical-certificates', [
+            'patient' => 'Two',
+            'purpose' => 'Excuse',
+            'consultation_id' => $c2->id,
+        ])
             ->assertCreated()
             ->assertJsonPath('data.reference', 'MC-2026-002');
+    }
+
+    // --- Patient self-request workflow --------------------------------------
+
+    public function test_patient_cannot_request_certificate_without_completed_consultation(): void
+    {
+        \App\Models\Patient::create([
+            'patient_id' => '2024-9999',
+            'name' => 'Student Juan',
+            'type' => 'Student',
+            'course_dept' => 'BSIT',
+            'status' => 'Active',
+        ]);
+        $role = Role::firstOrCreate(['name' => 'student'], ['label' => 'Student']);
+        $student = User::factory()->create([
+            'name' => 'Student Juan',
+            'patient_id' => '2024-9999',
+            'role_id' => $role->id,
+        ]);
+
+        $this->actingAsUser($student);
+
+        // No consultation exists
+        $this->postJson('/api/me/medical-certificates', [
+            'purpose' => 'Excuse Slip',
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'You must have an accomplished clinic consultation on file before requesting a medical certificate. Please visit the clinic or schedule a consultation first.');
+    }
+
+    public function test_patient_can_request_certificate_with_completed_consultation(): void
+    {
+        \App\Models\Patient::create([
+            'patient_id' => '2024-9999',
+            'name' => 'Student Juan',
+            'type' => 'Student',
+            'course_dept' => 'BSIT',
+            'status' => 'Active',
+        ]);
+        $role = Role::firstOrCreate(['name' => 'student'], ['label' => 'Student']);
+        $student = User::factory()->create([
+            'name' => 'Student Juan',
+            'patient_id' => '2024-9999',
+            'role_id' => $role->id,
+        ]);
+
+        $consultation = $this->makeCompletedConsultation([
+            'patient' => 'Student Juan',
+            'patient_id' => '2024-9999',
+            'status' => 'Completed',
+            'diagnosis' => 'Acute Bronchitis',
+        ]);
+
+        $this->actingAsUser($student);
+
+        $this->postJson('/api/me/medical-certificates', [
+            'purpose' => 'Excuse Slip',
+            'consultation_id' => $consultation->id,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.patient', 'Student Juan')
+            ->assertJsonPath('data.consultationId', $consultation->id)
+            ->assertJsonPath('data.diagnosis', 'Acute Bronchitis')
+            ->assertJsonPath('data.status', 'Pending');
     }
 }

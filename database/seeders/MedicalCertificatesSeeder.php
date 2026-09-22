@@ -61,7 +61,7 @@ class MedicalCertificatesSeeder extends Seeder
             ],
             [
                 'reference' => 'MC-2026-005',
-                'patient' => 'Susan Clave', 'patient_id' => 'EMP-119',
+                'patient' => 'Susan Clave', 'patient_id' => '23-010119',
                 'consultation_ref' => 'CONS-2026-004',
                 'issued_by' => 'Nurse C. Villanueva',
                 'purpose' => 'Fit to Return',

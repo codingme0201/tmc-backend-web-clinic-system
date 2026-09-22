@@ -76,9 +76,9 @@ class MedicalRecordsSeeder extends Seeder
                 ],
             ],
             [
-                'patient_id' => 'EMP-119', 'name' => 'Susan Clave', 'age' => 45, 'sex' => 'Female',
-                'type' => 'Staff', 'course_dept' => 'Registrar Office', 'contact' => '+63 955 456 7890',
-                'emergency_contact' => 'Robert Clave (Husband) — +63 955 456 7891', 'status' => 'Active',
+                'patient_id' => '23-010119', 'name' => 'Susan Clave', 'age' => 21, 'sex' => 'Female',
+                'type' => 'Student', 'course_dept' => 'BS Business Administration', 'contact' => '+63 955 456 7890',
+                'emergency_contact' => 'Robert Clave (Father) — +63 955 456 7891', 'status' => 'Active',
                 'last_updated' => '2026-07-29',
                 'histories' => [
                     ['date' => '2025-07-10', 'condition' => 'Right ankle sprain', 'notes' => 'Recovered with R.I.C.E. protocol and physiotherapy.'],
@@ -132,9 +132,9 @@ class MedicalRecordsSeeder extends Seeder
                 ],
             ],
             [
-                'patient_id' => 'EMP-042', 'name' => 'Dr. Alberto Ruiz', 'age' => 48, 'sex' => 'Male',
-                'type' => 'Student', 'course_dept' => 'College of Engineering', 'contact' => '+63 944 123 9876',
-                'emergency_contact' => 'Elena Ruiz (Wife) — +63 944 123 9870', 'status' => 'Active',
+                'patient_id' => '23-010042', 'name' => 'Alberto Ruiz', 'age' => 22, 'sex' => 'Male',
+                'type' => 'Student', 'course_dept' => 'BS Mechanical Engineering', 'contact' => '+63 944 123 9876',
+                'emergency_contact' => 'Elena Ruiz (Mother) — +63 944 123 9870', 'status' => 'Active',
                 'last_updated' => '2026-07-15',
                 'histories' => [
                     ['date' => '2022-03-14', 'condition' => 'Hypertension', 'notes' => 'Lifestyle modification and daily medication; monitored regularly.'],
