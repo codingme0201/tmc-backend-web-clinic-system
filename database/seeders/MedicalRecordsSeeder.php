@@ -133,7 +133,7 @@ class MedicalRecordsSeeder extends Seeder
             ],
             [
                 'patient_id' => 'EMP-042', 'name' => 'Dr. Alberto Ruiz', 'age' => 48, 'sex' => 'Male',
-                'type' => 'Faculty', 'course_dept' => 'College of Engineering', 'contact' => '+63 944 123 9876',
+                'type' => 'Student', 'course_dept' => 'College of Engineering', 'contact' => '+63 944 123 9876',
                 'emergency_contact' => 'Elena Ruiz (Wife) — +63 944 123 9870', 'status' => 'Active',
                 'last_updated' => '2026-07-15',
                 'histories' => [

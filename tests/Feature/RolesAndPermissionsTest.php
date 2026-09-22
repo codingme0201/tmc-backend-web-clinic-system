@@ -145,15 +145,17 @@ class RolesAndPermissionsTest extends TestCase
             ->assertJsonValidationErrors(['name']);
     }
 
-    public function test_role_name_cannot_be_staff(): void
+    public function test_role_name_cannot_be_staff_instructor_faculty_or_patient(): void
     {
         $admin = $this->adminUser();
 
         $this->actingAsUser($admin);
 
-        $this->postJson('/api/roles', ['name' => 'staff', 'description' => 'Staff'])
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors(['name']);
+        foreach (['staff', 'instructor', 'faculty', 'patient'] as $forbidden) {
+            $this->postJson('/api/roles', ['name' => $forbidden, 'description' => $forbidden])
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors(['name']);
+        }
     }
 
     // --- Update role -----------------------------------------------------------

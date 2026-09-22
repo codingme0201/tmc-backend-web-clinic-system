@@ -16,7 +16,7 @@ class SystemSettingSeeder extends Seeder
             'clinic_email' => 'clinic@trinidadmc.edu.ph',
             'clinic_hours' => '8:00 AM - 5:00 PM',
             'clinic_days' => 'Monday - Friday',
-            'clinic_description' => 'Primary healthcare facility serving students, faculty, and staff of Trinidad Municipal College.',
+            'clinic_description' => 'Primary healthcare facility serving students and clinic personnel of Trinidad Municipal College.',
             'emergency_hotline' => '+63 917 123 4567',
             'online_appointments_enabled' => true,
             'appointment_buffer_minutes' => 15,

@@ -212,11 +212,42 @@ class AuthTest extends TestCase
         $response->assertCreated()
             ->assertJsonStructure(['token', 'user' => ['id', 'name', 'email', 'role', 'patientId']])
             ->assertJsonPath('user.email', 'maria.clara@tmc.edu.ph')
-            ->assertJsonPath('user.role', 'patient')
+            ->assertJsonPath('user.role', 'student')
             ->assertJsonPath('user.patientId', '24-998877');
 
         $this->assertDatabaseHas('users', ['email' => 'maria.clara@tmc.edu.ph']);
-        $this->assertDatabaseHas('patients', ['patient_id' => '24-998877', 'name' => 'Maria Clara']);
+        $this->assertDatabaseHas('patients', ['patient_id' => '24-998877', 'name' => 'Maria Clara', 'type' => 'Student']);
+    }
+
+    public function test_student_login_on_web_is_forbidden_and_mobile_succeeds(): void
+    {
+        $studentRole = Role::firstOrCreate(['name' => 'student'], ['description' => 'Student']);
+        User::factory()->create([
+            'email' => 'student.user@tmc.edu.ph',
+            'password' => 'password123',
+            'role_id' => $studentRole->id,
+            'status' => 'active',
+        ]);
+
+        // Web login forbidden
+        $webResponse = $this->postJson('/api/login', [
+            'email' => 'student.user@tmc.edu.ph',
+            'password' => 'password123',
+            'client' => 'web',
+        ]);
+        $webResponse->assertForbidden()
+            ->assertJsonPath('code', 'STUDENT_MOBILE_ONLY')
+            ->assertJsonPath('role', 'student');
+
+        // Mobile login succeeds
+        $mobileResponse = $this->postJson('/api/login', [
+            'email' => 'student.user@tmc.edu.ph',
+            'password' => 'password123',
+            'client' => 'mobile',
+        ]);
+        $mobileResponse->assertOk()
+            ->assertJsonPath('user.email', 'student.user@tmc.edu.ph')
+            ->assertJsonPath('user.role', 'student');
     }
 
     public function test_forgot_password_returns_acknowledgement(): void

@@ -17,7 +17,7 @@ class UserSeeder extends Seeder
         $adminRoleId = Role::where('name', 'admin')->value('id');
         $doctorRoleId = Role::where('name', 'doctor')->value('id');
         $nurseRoleId = Role::where('name', 'nurse')->value('id');
-        $patientRoleId = Role::where('name', 'patient')->value('id');
+        $studentRoleId = Role::where('name', 'student')->value('id') ?? Role::where('name', 'patient')->value('id');
 
         $users = [
             [
@@ -74,7 +74,7 @@ class UserSeeder extends Seeder
                 'name' => 'Angela Reyes',
                 'email' => 'demo@tmccarelink.com',
                 'password' => 'Demo1234',
-                'role_id' => $patientRoleId,
+                'role_id' => $studentRoleId,
                 'patient_id' => '24-021128',
                 'status' => 'active',
             ],
@@ -82,7 +82,7 @@ class UserSeeder extends Seeder
                 'name' => 'Angela Reyes',
                 'email' => 'angela.reyes@tmc.edu.ph',
                 'password' => 'password',
-                'role_id' => $patientRoleId,
+                'role_id' => $studentRoleId,
                 'patient_id' => '24-021128',
                 'status' => 'active',
             ],
@@ -90,7 +90,7 @@ class UserSeeder extends Seeder
                 'name' => 'Mark Dela Cruz',
                 'email' => 'mark.delacruz@tmc.edu.ph',
                 'password' => 'password',
-                'role_id' => $patientRoleId,
+                'role_id' => $studentRoleId,
                 'patient_id' => '22-010941',
                 'status' => 'active',
             ],
@@ -98,7 +98,7 @@ class UserSeeder extends Seeder
                 'name' => 'Joanna Lim',
                 'email' => 'joanna.lim@tmc.edu.ph',
                 'password' => 'password',
-                'role_id' => $patientRoleId,
+                'role_id' => $studentRoleId,
                 'patient_id' => '21-011122',
                 'status' => 'active',
             ],

@@ -17,32 +17,19 @@ class PatientFactory extends Factory
      */
     public function definition(): array
     {
-        $type = fake()->randomElement(['Student', 'Faculty', 'Staff']);
+        $type = 'Student';
         $name = fake()->name();
 
         return [
-            'patient_id' => match ($type) {
-                'Student' => fake()->numberBetween(20, 25).'-'.str_pad((string) fake()->unique()->numberBetween(10000, 999999), 6, '0', STR_PAD_LEFT),
-                default => 'EMP-'.str_pad((string) fake()->unique()->numberBetween(100, 999), 3, '0', STR_PAD_LEFT),
-            },
+            'patient_id' => fake()->numberBetween(20, 25).'-'.str_pad((string) fake()->unique()->numberBetween(10000, 999999), 6, '0', STR_PAD_LEFT),
             'name' => $name,
             'type' => $type,
-            'course_dept' => match ($type) {
-                'Student' => fake()->randomElement([
-                    'BS Computer Science', 'BS Information Technology',
-                    'BS Business Administration', 'BS Hospitality Management',
-                    'BEED Elementary Education', 'BS Engineering',
-                    'BS Nursing', 'BS Accountancy',
-                ]),
-                'Faculty' => fake()->randomElement([
-                    'College of Engineering', 'College of Education',
-                    'College of Business', 'College of Computer Studies',
-                ]),
-                default => fake()->randomElement([
-                    'Registrar Office', 'Finance Office',
-                    'Student Affairs', 'IT Department',
-                ]),
-            },
+            'course_dept' => fake()->randomElement([
+                'BS Computer Science', 'BS Information Technology',
+                'BS Business Administration', 'BS Hospitality Management',
+                'BEED Elementary Education', 'BS Engineering',
+                'BS Nursing', 'BS Accountancy',
+            ]),
             'contact' => '+63 9'.fake()->numerify('## ### ####'),
             'emergency_contact' => fake()->name().' ('.fake()->randomElement(['Mother', 'Father', 'Spouse', 'Sibling']).') - +63 9'.fake()->numerify('## ### ####'),
             'allergies' => fake()->randomElement(['None', 'Peanuts', 'Penicillin', 'Seafood', 'Sulfa drugs', 'Dust Mites', 'Aspirin']),

@@ -173,22 +173,30 @@ class RolesAndPermissionsSeeder extends Seeder
             'notifications.view',
         ])->pluck('id'));
 
-        // Patient: mobile app self-service.
-        $patientRole = Role::firstOrCreate(
-            ['name' => 'patient'],
-            ['description' => 'Patient — student or faculty mobile access', 'is_system' => true],
+        // Student: mobile app self-service only.
+        $studentRole = Role::firstOrCreate(
+            ['name' => 'student'],
+            ['description' => 'Student — mobile app self-service', 'is_system' => true],
         );
-        $patientRole->update(['is_system' => true]);
+        $studentRole->update(['is_system' => true, 'description' => 'Student — mobile app self-service']);
 
-        // Clean up legacy staff role if present.
-        $legacyStaff = Role::where('name', 'staff')->first();
-        if ($legacyStaff) {
-            User::where('role_id', $legacyStaff->id)->update(['role_id' => $nurse->id]);
-            $legacyStaff->permissions()->detach();
-            $legacyStaff->delete();
+        // Clean up legacy patient role if present and migrate users to student.
+        $legacyPatient = Role::where('name', 'patient')->first();
+        if ($legacyPatient && $legacyPatient->id !== $studentRole->id) {
+            User::where('role_id', $legacyPatient->id)->update(['role_id' => $studentRole->id]);
+            $legacyPatient->permissions()->detach();
+            $legacyPatient->delete();
         }
 
-        // Any user still without a role defaults to patient.
-        User::whereNull('role_id')->update(['role_id' => $patientRole->id]);
+        // Clean up disallowed roles (staff, faculty, instructor) if present.
+        $disallowedRoles = Role::whereIn('name', ['staff', 'faculty', 'instructor'])->get();
+        foreach ($disallowedRoles as $disRole) {
+            User::where('role_id', $disRole->id)->update(['role_id' => $nurse->id]);
+            $disRole->permissions()->detach();
+            $disRole->delete();
+        }
+
+        // Any user still without a role defaults to student.
+        User::whereNull('role_id')->update(['role_id' => $studentRole->id]);
     }
 }

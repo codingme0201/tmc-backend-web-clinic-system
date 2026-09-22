@@ -43,17 +43,19 @@ class AuthController extends Controller
         }
 
         $client = $credentials['client'] ?? $request->header('X-Client-Platform');
-        if ($client === 'web' && $user->role?->name === 'patient') {
+        $isStudentUser = in_array($user->role?->name, ['student', 'patient'], true);
+
+        if ($client === 'web' && $isStudentUser) {
             return response()->json([
-                'message' => 'Patient accounts can only access TMC CareLink via the mobile application. Only doctors, nurses, and administrators can enter the web clinic system.',
-                'code' => 'PATIENT_MOBILE_ONLY',
-                'role' => 'patient',
+                'message' => 'Student accounts can only access TMC CareLink via the mobile application. Only doctors, nurses, and administrators can enter the web clinic system.',
+                'code' => $user->role?->name === 'student' ? 'STUDENT_MOBILE_ONLY' : 'PATIENT_MOBILE_ONLY',
+                'role' => $user->role?->name,
             ], 403);
         }
 
-        if ($client === 'mobile' && $user->role?->name !== 'patient') {
+        if ($client === 'mobile' && ! $isStudentUser) {
             return response()->json([
-                'message' => 'This mobile app is for patient users only. Doctors, nurses, and administrators must log in through the web clinic portal.',
+                'message' => 'This mobile app is for student users only. Doctors, nurses, and administrators must log in through the web clinic portal.',
                 'code' => 'CLINIC_STAFF_WEB_ONLY',
                 'role' => $user->role?->name,
             ], 403);
@@ -141,13 +143,15 @@ class AuthController extends Controller
             ]
         );
 
-        $patientRole = Role::firstOrCreate(['name' => 'patient'], ['description' => 'Patient']);
+        $studentRole = Role::where('name', 'student')->first()
+            ?? Role::where('name', 'patient')->first()
+            ?? Role::firstOrCreate(['name' => 'student'], ['description' => 'Student — mobile self-service', 'is_system' => true]);
 
         $user = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => $validated['password'],
-            'role_id' => $patientRole->id,
+            'role_id' => $studentRole->id,
             'patient_id' => $patient->patient_id,
             'status' => 'active',
         ]);
