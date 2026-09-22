@@ -14,7 +14,7 @@ class ReportFilterRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'start_date' => ['nullable', 'date', 'before_or_equal:end_date'],
+            'start_date' => ['nullable', 'date'],
             'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
             'status' => ['nullable', 'string', 'max:50'],
             'patient' => ['nullable', 'string', 'max:255'],

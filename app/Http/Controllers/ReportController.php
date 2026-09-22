@@ -11,7 +11,6 @@ use App\Models\Prescription;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Response;
 
 class ReportController extends Controller
 {
@@ -39,10 +38,10 @@ class ReportController extends Controller
                 'staff' => $a->staff ?: 'Unassigned',
                 'type' => $a->type,
                 'reason' => $a->reason,
-                'date' => $a->date->format('Y-m-d'),
+                'date' => $a->date instanceof Carbon ? $a->date->format('Y-m-d') : ($a->date ? Carbon::parse($a->date)->format('Y-m-d') : null),
                 'time' => $a->time,
                 'status' => $a->status,
-                'requestedOn' => $a->requested_on?->format('Y-m-d'),
+                'requestedOn' => $a->requested_on instanceof Carbon ? $a->requested_on->format('Y-m-d') : ($a->requested_on ? Carbon::parse($a->requested_on)->format('Y-m-d') : null),
             ]),
             'meta' => [
                 'total' => $appointments->count(),
@@ -72,7 +71,7 @@ class ReportController extends Controller
                 'patient' => $c->patient,
                 'patientId' => $c->patient_id,
                 'staff' => $c->staff ?: 'Unassigned',
-                'date' => $c->date->format('Y-m-d'),
+                'date' => $c->date instanceof Carbon ? $c->date->format('Y-m-d') : ($c->date ? Carbon::parse($c->date)->format('Y-m-d') : null),
                 'time' => $c->time,
                 'status' => $c->status,
                 'chiefComplaint' => $c->chief_complaint,
@@ -81,8 +80,8 @@ class ReportController extends Controller
                 'vitals' => $c->vitals,
                 'clinicalFindings' => $c->clinical_findings,
                 'disposition' => $c->disposition,
-                'startedAt' => $c->started_at?->toIso8601String(),
-                'completedAt' => $c->completed_at?->toIso8601String(),
+                'startedAt' => $c->started_at,
+                'completedAt' => $c->completed_at,
             ]),
             'meta' => [
                 'total' => $consultations->count(),
@@ -96,7 +95,7 @@ class ReportController extends Controller
      */
     public function patients(ReportFilterRequest $request): JsonResponse
     {
-        $query = Patient::query();
+        $query = Patient::withCount(['appointments', 'consultations', 'medicalCertificates', 'prescriptions']);
 
         if ($search = trim((string) $request->query('patient', ''))) {
             $query->where(function ($q) use ($search) {
@@ -132,10 +131,10 @@ class ReportController extends Controller
                 'courseDept' => $p->course_dept,
                 'contact' => $p->contact,
                 'status' => $p->status,
-                'appointmentsCount' => $p->appointments()->count(),
-                'consultationsCount' => $p->consultations()->count(),
-                'medicalCertificatesCount' => $p->medicalCertificates()->count(),
-                'prescriptionsCount' => $p->prescriptions()->count(),
+                'appointmentsCount' => $p->appointments_count,
+                'consultationsCount' => $p->consultations_count,
+                'medicalCertificatesCount' => $p->medical_certificates_count,
+                'prescriptionsCount' => $p->prescriptions_count,
             ]),
             'meta' => [
                 'total' => $patients->count(),
@@ -186,11 +185,11 @@ class ReportController extends Controller
                 'issuedBy' => $mc->issued_by,
                 'requestedBy' => $mc->requested_by,
                 'approvedBy' => $mc->approved_by,
-                'issueDate' => $mc->issue_date instanceof Carbon ? $mc->issue_date->format('Y-m-d') : $mc->issue_date,
-                'validUntil' => $mc->valid_until instanceof Carbon ? $mc->valid_until->format('Y-m-d') : $mc->valid_until,
+                'issueDate' => $mc->issue_date instanceof Carbon ? $mc->issue_date->format('Y-m-d') : ($mc->issue_date ? Carbon::parse($mc->issue_date)->format('Y-m-d') : null),
+                'validUntil' => $mc->valid_until instanceof Carbon ? $mc->valid_until->format('Y-m-d') : ($mc->valid_until ? Carbon::parse($mc->valid_until)->format('Y-m-d') : null),
                 'status' => $mc->status,
-                'approvedAt' => $mc->approved_at?->toIso8601String(),
-                'rejectedAt' => $mc->rejected_at?->toIso8601String(),
+                'approvedAt' => $mc->approved_at ? Carbon::parse($mc->approved_at)->toIso8601String() : null,
+                'rejectedAt' => $mc->rejected_at ? Carbon::parse($mc->rejected_at)->toIso8601String() : null,
                 'rejectionReason' => $mc->rejection_reason,
             ]),
             'meta' => [
@@ -230,7 +229,7 @@ class ReportController extends Controller
                 'patient' => $rx->patient,
                 'patientId' => $rx->patient_id,
                 'prescribedBy' => $rx->prescribed_by,
-                'prescriptionDate' => $rx->prescription_date instanceof Carbon ? $rx->prescription_date->format('Y-m-d') : $rx->prescription_date,
+                'prescriptionDate' => $rx->prescription_date instanceof Carbon ? $rx->prescription_date->format('Y-m-d') : ($rx->prescription_date ? Carbon::parse($rx->prescription_date)->format('Y-m-d') : null),
                 'medications' => $rx->medications->map(fn ($m) => [
                     'medicineName' => $m->medicine_name,
                     'dosage' => $m->dosage,
@@ -339,11 +338,11 @@ class ReportController extends Controller
         ]);
 
         $data = match ($type) {
-            'appointments' => $this->getExportData('appointments', $validated),
-            'consultations' => $this->getExportData('consultations', $validated),
-            'patients' => $this->getExportData('patients', $validated),
-            'medical-certificates' => $this->getExportData('medical-certificates', $validated),
-            'prescriptions' => $this->getExportData('prescriptions', $validated),
+            'appointments' => $this->exportAppointments($validated),
+            'consultations' => $this->exportConsultations($validated),
+            'patients' => $this->exportPatients($validated),
+            'medical-certificates' => $this->exportMedicalCertificates($validated),
+            'prescriptions' => $this->exportPrescriptions($validated),
             default => null,
         };
 
@@ -384,7 +383,10 @@ class ReportController extends Controller
     private function applyPatientFilter($query, ReportFilterRequest $request): void
     {
         if ($patient = trim((string) $request->query('patient', ''))) {
-            $query->where('patient', 'like', "%{$patient}%");
+            $query->where(function ($q) use ($patient) {
+                $q->where('patient', 'like', "%{$patient}%")
+                    ->orWhere('patient_id', 'like', "%{$patient}%");
+            });
         }
     }
 
@@ -416,25 +418,18 @@ class ReportController extends Controller
         return $filters;
     }
 
-    private function getExportData(string $type, array $filters): ?array
-    {
-        return match ($type) {
-            'appointments' => $this->exportAppointments($filters),
-            'consultations' => $this->exportConsultations($filters),
-            'patients' => $this->exportPatients($filters),
-            'medical-certificates' => $this->exportMedicalCertificates($filters),
-            'prescriptions' => $this->exportPrescriptions($filters),
-            default => null,
-        };
-    }
-
     private function exportAppointments(array $filters): array
     {
         $query = Appointment::query();
         if (! empty($filters['start_date'])) $query->where('date', '>=', $filters['start_date']);
         if (! empty($filters['end_date'])) $query->where('date', '<=', $filters['end_date']);
         if (! empty($filters['status']) && $filters['status'] !== 'All') $query->where('status', $filters['status']);
-        if (! empty($filters['patient'])) $query->where('patient', 'like', "%{$filters['patient']}%");
+        if (! empty($filters['patient'])) {
+            $query->where(function ($q) use ($filters) {
+                $q->where('patient', 'like', "%{$filters['patient']}%")
+                    ->orWhere('patient_id', 'like', "%{$filters['patient']}%");
+            });
+        }
         if (! empty($filters['staff'])) $query->where('staff', 'like', "%{$filters['staff']}%");
         if (! empty($filters['type']) && $filters['type'] !== 'All') $query->where('type', $filters['type']);
 
@@ -444,7 +439,7 @@ class ReportController extends Controller
             'Staff' => $a->staff ?: 'Unassigned',
             'Type' => $a->type,
             'Reason' => $a->reason,
-            'Date' => $a->date->format('Y-m-d'),
+            'Date' => $a->date instanceof Carbon ? $a->date->format('Y-m-d') : ($a->date ? Carbon::parse($a->date)->format('Y-m-d') : ''),
             'Time' => $a->time,
             'Status' => $a->status,
         ]);
@@ -461,14 +456,19 @@ class ReportController extends Controller
         if (! empty($filters['start_date'])) $query->where('date', '>=', $filters['start_date']);
         if (! empty($filters['end_date'])) $query->where('date', '<=', $filters['end_date']);
         if (! empty($filters['status']) && $filters['status'] !== 'All') $query->where('status', $filters['status']);
-        if (! empty($filters['patient'])) $query->where('patient', 'like', "%{$filters['patient']}%");
+        if (! empty($filters['patient'])) {
+            $query->where(function ($q) use ($filters) {
+                $q->where('patient', 'like', "%{$filters['patient']}%")
+                    ->orWhere('patient_id', 'like', "%{$filters['patient']}%");
+            });
+        }
         if (! empty($filters['staff'])) $query->where('staff', 'like', "%{$filters['staff']}%");
 
         $rows = $query->orderBy('date', 'desc')->get()->map(fn ($c) => [
             'Reference' => $c->reference,
             'Patient' => $c->patient,
             'Staff' => $c->staff ?: 'Unassigned',
-            'Date' => $c->date->format('Y-m-d'),
+            'Date' => $c->date instanceof Carbon ? $c->date->format('Y-m-d') : ($c->date ? Carbon::parse($c->date)->format('Y-m-d') : ''),
             'Time' => $c->time,
             'Status' => $c->status,
             'Chief Complaint' => $c->chief_complaint,
@@ -515,7 +515,12 @@ class ReportController extends Controller
         if (! empty($filters['start_date'])) $query->where('issue_date', '>=', $filters['start_date']);
         if (! empty($filters['end_date'])) $query->where('issue_date', '<=', $filters['end_date']);
         if (! empty($filters['status']) && $filters['status'] !== 'All') $query->where('status', $filters['status']);
-        if (! empty($filters['patient'])) $query->where('patient', 'like', "%{$filters['patient']}%");
+        if (! empty($filters['patient'])) {
+            $query->where(function ($q) use ($filters) {
+                $q->where('patient', 'like', "%{$filters['patient']}%")
+                    ->orWhere('patient_id', 'like', "%{$filters['patient']}%");
+            });
+        }
 
         $rows = $query->orderBy('issue_date', 'desc')->get()->map(fn ($mc) => [
             'Reference' => $mc->reference,
@@ -523,8 +528,8 @@ class ReportController extends Controller
             'Purpose' => $mc->purpose,
             'Diagnosis' => $mc->diagnosis,
             'Issued By' => $mc->issued_by,
-            'Issue Date' => $mc->issue_date instanceof Carbon ? $mc->issue_date->format('Y-m-d') : $mc->issue_date,
-            'Valid Until' => $mc->valid_until instanceof Carbon ? $mc->valid_until->format('Y-m-d') : $mc->valid_until,
+            'Issue Date' => $mc->issue_date instanceof Carbon ? $mc->issue_date->format('Y-m-d') : ($mc->issue_date ? Carbon::parse($mc->issue_date)->format('Y-m-d') : ''),
+            'Valid Until' => $mc->valid_until instanceof Carbon ? $mc->valid_until->format('Y-m-d') : ($mc->valid_until ? Carbon::parse($mc->valid_until)->format('Y-m-d') : ''),
             'Status' => $mc->status,
         ]);
 
@@ -539,14 +544,19 @@ class ReportController extends Controller
         $query = Prescription::with('medications');
         if (! empty($filters['start_date'])) $query->where('prescription_date', '>=', $filters['start_date']);
         if (! empty($filters['end_date'])) $query->where('prescription_date', '<=', $filters['end_date']);
-        if (! empty($filters['patient'])) $query->where('patient', 'like', "%{$filters['patient']}%");
+        if (! empty($filters['patient'])) {
+            $query->where(function ($q) use ($filters) {
+                $q->where('patient', 'like', "%{$filters['patient']}%")
+                    ->orWhere('patient_id', 'like', "%{$filters['patient']}%");
+            });
+        }
         if (! empty($filters['staff'])) $query->where('prescribed_by', 'like', "%{$filters['staff']}%");
 
         $rows = $query->orderBy('prescription_date', 'desc')->get()->flatMap(fn ($rx) => $rx->medications->map(fn ($m) => [
             'Reference' => $rx->reference,
             'Patient' => $rx->patient,
             'Prescribed By' => $rx->prescribed_by,
-            'Date' => $rx->prescription_date instanceof Carbon ? $rx->prescription_date->format('Y-m-d') : $rx->prescription_date,
+            'Date' => $rx->prescription_date instanceof Carbon ? $rx->prescription_date->format('Y-m-d') : ($rx->prescription_date ? Carbon::parse($rx->prescription_date)->format('Y-m-d') : ''),
             'Medicine' => $m->medicine_name,
             'Dosage' => $m->dosage,
             'Frequency' => $m->frequency,

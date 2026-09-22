@@ -149,6 +149,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'schedules.view',
             'calendar.view', 'calendar.create', 'calendar.update', 'calendar.delete', 'calendar.block',
             'reports.view',
+            'reports.export',
             'audit_logs.view',
             'notifications.view', 'notifications.send',
         ])->pluck('id'));
@@ -169,6 +170,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'patients.view', 'patients.create',
             'schedules.view',
             'calendar.view', 'calendar.create', 'calendar.update', 'calendar.delete', 'calendar.block',
+            'reports.view',
+            'reports.export',
             'audit_logs.view',
             'notifications.view',
         ])->pluck('id'));
