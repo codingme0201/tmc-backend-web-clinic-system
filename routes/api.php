@@ -126,6 +126,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Medical records (+ nested conditions/allergies)
     Route::get('/medical-records', [MedicalRecordController::class, 'index'])->middleware('permission:medical_records.view');
     Route::middleware('permission:medical_records.update')->group(function () {
+        Route::patch('/medical-records/{record}/status', [MedicalRecordController::class, 'updateStatus']);
         Route::post('/medical-records/{record}/conditions', [MedicalRecordController::class, 'storeCondition']);
         Route::patch('/medical-records/{record}/conditions/{condition}', [MedicalRecordController::class, 'updateCondition']);
         Route::delete('/medical-records/{record}/conditions/{condition}', [MedicalRecordController::class, 'destroyCondition']);

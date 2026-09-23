@@ -28,10 +28,10 @@ class MedicalRecordResource extends JsonResource
             'contact' => $this->contact ?? '',
             'emergencyContact' => $this->emergency_contact ?? '',
             'status' => $this->status,
-            'lastUpdated' => $this->last_updated->format('Y-m-d'),
+            'lastUpdated' => $this->last_updated?->format('Y-m-d') ?? ($this->updated_at?->format('Y-m-d') ?? now()->toDateString()),
             'medicalHistory' => $this->histories->map(fn ($h) => [
                 'id' => (string) $h->id,
-                'date' => $h->date->format('Y-m-d'),
+                'date' => $h->date?->format('Y-m-d') ?? '',
                 'condition' => $h->condition,
                 'notes' => $h->notes ?? '',
             ])->all(),

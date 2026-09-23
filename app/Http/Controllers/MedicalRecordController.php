@@ -6,6 +6,7 @@ use App\Http\Requests\StoreMedicalRecordAllergyRequest;
 use App\Http\Requests\StoreMedicalRecordConditionRequest;
 use App\Http\Requests\UpdateMedicalRecordAllergyRequest;
 use App\Http\Requests\UpdateMedicalRecordConditionRequest;
+use App\Http\Requests\UpdateMedicalRecordStatusRequest;
 use App\Http\Resources\MedicalRecordResource;
 use App\Models\MedicalRecord;
 use App\Models\MedicalRecordAllergy;
@@ -45,6 +46,21 @@ class MedicalRecordController extends Controller
         }
 
         return MedicalRecordResource::collection($query->orderBy('name')->get());
+    }
+
+    /**
+     * Update the archive/active status of a medical record.
+     */
+    public function updateStatus(
+        UpdateMedicalRecordStatusRequest $request,
+        MedicalRecord $record,
+    ): JsonResponse {
+        $record->update([
+            'status' => $request->validated('status'),
+            'last_updated' => now()->toDateString(),
+        ]);
+
+        return $this->resourceWithChildren($record)->response();
     }
 
     // ---------- Medical conditions ----------

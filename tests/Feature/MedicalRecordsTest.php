@@ -375,4 +375,44 @@ class MedicalRecordsTest extends TestCase
         $this->assertDatabaseMissing('medical_record_conditions', ['id' => $condition->id]);
         $this->assertDatabaseMissing('medical_record_allergies', ['id' => $allergy->id]);
     }
+
+    public function test_admin_can_archive_and_restore_a_medical_record(): void
+    {
+        $admin = $this->adminUser();
+        $record = $this->makeRecord(['patient_id' => '2024-5001', 'status' => 'Active']);
+
+        $this->actingAsUser($admin);
+
+        // Archive
+        $this->patchJson("/api/medical-records/{$record->id}/status", ['status' => 'Archived'])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'Archived');
+
+        $this->assertDatabaseHas('medical_records', [
+            'id' => $record->id,
+            'status' => 'Archived',
+        ]);
+
+        // Restore
+        $this->patchJson("/api/medical-records/{$record->id}/status", ['status' => 'Active'])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'Active');
+
+        $this->assertDatabaseHas('medical_records', [
+            'id' => $record->id,
+            'status' => 'Active',
+        ]);
+    }
+
+    public function test_updating_status_validates_allowed_values(): void
+    {
+        $admin = $this->adminUser();
+        $record = $this->makeRecord(['patient_id' => '2024-5002', 'status' => 'Active']);
+
+        $this->actingAsUser($admin);
+
+        $this->patchJson("/api/medical-records/{$record->id}/status", ['status' => 'InvalidStatus'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('status');
+    }
 }
