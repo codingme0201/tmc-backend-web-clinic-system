@@ -9,10 +9,15 @@ use Illuminate\Database\Seeder;
 class DemoDataSeeder extends Seeder
 {
     /**
-     * Seeds demo/mock records for development testing.
+     * Seeds comprehensive demo/mock records for development testing (a lot of example data).
      */
     public function run(): void
     {
+        // 1. Foundational System Setup & Administrator
+        $this->call(RolesAndPermissionsSeeder::class);
+        $this->call(SystemSettingSeeder::class);
+        $this->call(AdminSeeder::class);
+
         $doctorRoleId = Role::where('name', 'doctor')->value('id');
 
         User::firstOrCreate(['email' => 'test@example.com'], [
