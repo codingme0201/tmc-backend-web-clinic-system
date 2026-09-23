@@ -116,29 +116,74 @@ class AuthController extends Controller
     public function register(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
+            'name' => ['sometimes', 'string', 'max:255'],
+            'first_name' => ['nullable', 'string', 'max:100'],
+            'firstName' => ['nullable', 'string', 'max:100'],
+            'middle_name' => ['nullable', 'string', 'max:100'],
+            'middleName' => ['nullable', 'string', 'max:100'],
+            'last_name' => ['nullable', 'string', 'max:100'],
+            'lastName' => ['nullable', 'string', 'max:100'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:6'],
             'patient_id' => ['nullable', 'string', 'max:50'],
             'student_id' => ['nullable', 'string', 'max:50'],
+            'studentId' => ['nullable', 'string', 'max:50'],
             'type' => ['nullable', 'string', 'max:50'],
-            'course_dept' => ['nullable', 'string', 'max:100'],
+            'age' => ['nullable', 'integer', 'min:1', 'max:120'],
+            'course' => ['nullable', 'string', 'max:150'],
+            'course_dept' => ['nullable', 'string', 'max:150'],
+            'courseDept' => ['nullable', 'string', 'max:150'],
+            'block' => ['nullable', 'string', 'max:50'],
+            'address' => ['nullable', 'string', 'max:500'],
+            'nationality' => ['nullable', 'string', 'max:100'],
             'contact' => ['nullable', 'string', 'max:50'],
+            'phone' => ['nullable', 'string', 'max:50'],
+            'emergency_contact_name' => ['nullable', 'string', 'max:150'],
+            'emergencyContactName' => ['nullable', 'string', 'max:150'],
+            'emergency_contact_phone' => ['nullable', 'string', 'max:50'],
+            'emergencyContactPhone' => ['nullable', 'string', 'max:50'],
         ]);
 
-        $patientId = $validated['patient_id'] ?? $validated['student_id'] ?? null;
+        $firstName = $validated['firstName'] ?? $validated['first_name'] ?? null;
+        $middleName = $validated['middleName'] ?? $validated['middle_name'] ?? null;
+        $lastName = $validated['lastName'] ?? $validated['last_name'] ?? null;
+        $patientId = $validated['studentId'] ?? $validated['student_id'] ?? ($validated['patient_id'] ?? null);
+
+        $name = $validated['name'] ?? null;
+        if (! $name && $firstName && $lastName) {
+            $name = trim($firstName . ($middleName ? " {$middleName} " : ' ') . $lastName);
+        }
+        if (! $name) {
+            $name = $firstName ?? 'Student User';
+        }
 
         if (! $patientId) {
             $patientId = 'STU-' . date('y') . '-' . str_pad((string) mt_rand(1, 999999), 6, '0', STR_PAD_LEFT);
         }
 
+        $course = $validated['course'] ?? $validated['courseDept'] ?? $validated['course_dept'] ?? 'General';
+        $phone = $validated['phone'] ?? $validated['contact'] ?? '';
+        $emergName = $validated['emergencyContactName'] ?? $validated['emergency_contact_name'] ?? null;
+        $emergPhone = $validated['emergencyContactPhone'] ?? $validated['emergency_contact_phone'] ?? null;
+        $emergContact = $emergName || $emergPhone ? trim(($emergName ?? '') . ($emergPhone ? " ({$emergPhone})" : '')) : null;
+
         $patient = Patient::firstOrCreate(
             ['patient_id' => $patientId],
             [
-                'name' => $validated['name'],
+                'name' => $name,
+                'first_name' => $firstName,
+                'middle_name' => $middleName,
+                'last_name' => $lastName,
+                'age' => $validated['age'] ?? null,
                 'type' => $validated['type'] ?? 'Student',
-                'course_dept' => $validated['course_dept'] ?? 'General',
-                'contact' => $validated['contact'] ?? '',
+                'course_dept' => $course,
+                'block' => $validated['block'] ?? null,
+                'address' => $validated['address'] ?? null,
+                'nationality' => $validated['nationality'] ?? 'Filipino',
+                'contact' => $phone,
+                'emergency_contact_name' => $emergName,
+                'emergency_contact_phone' => $emergPhone,
+                'emergency_contact' => $emergContact ?? '',
                 'status' => 'Active',
             ]
         );
@@ -148,7 +193,7 @@ class AuthController extends Controller
             ?? Role::firstOrCreate(['name' => 'student'], ['description' => 'Student — mobile self-service', 'is_system' => true]);
 
         $user = User::create([
-            'name' => $validated['name'],
+            'name' => $name,
             'email' => $validated['email'],
             'password' => $validated['password'],
             'role_id' => $studentRole->id,
@@ -191,7 +236,7 @@ class AuthController extends Controller
      */
     private function userPayload(User $user): array
     {
-        $user->loadMissing('role.permissions');
+        $user->loadMissing(['role.permissions', 'patient']);
 
         return [
             'id' => $user->id,
@@ -199,6 +244,7 @@ class AuthController extends Controller
             'email' => $user->email,
             'role' => $user->role?->name,
             'patientId' => $user->patient_id,
+            'isProfileComplete' => $user->patient ? $user->patient->isProfileComplete() : false,
             'permissions' => $user->role?->permissions->pluck('name')->values()->all() ?? [],
         ];
     }

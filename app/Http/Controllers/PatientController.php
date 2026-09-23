@@ -46,20 +46,85 @@ class PatientController extends Controller
         $patient = $request->user()->patient;
 
         if (! $patient) {
-            abort(404, 'No patient record associated with this user.');
+            // Auto-create a linked patient record if one doesn't exist yet
+            $patient = Patient::create([
+                'patient_id' => 'STU-' . date('y') . '-' . str_pad((string) mt_rand(1, 999999), 6, '0', STR_PAD_LEFT),
+                'name' => $request->user()->name,
+                'type' => 'Student',
+                'course_dept' => 'General',
+                'status' => 'Active',
+            ]);
+            $request->user()->update(['patient_id' => $patient->patient_id]);
         }
 
         $validated = $request->validate([
+            'firstName' => ['nullable', 'string', 'max:100'],
+            'first_name' => ['nullable', 'string', 'max:100'],
+            'middleName' => ['nullable', 'string', 'max:100'],
+            'middle_name' => ['nullable', 'string', 'max:100'],
+            'lastName' => ['nullable', 'string', 'max:100'],
+            'last_name' => ['nullable', 'string', 'max:100'],
+            'age' => ['nullable', 'integer', 'min:1', 'max:120'],
+            'studentId' => ['nullable', 'string', 'max:50'],
+            'student_id' => ['nullable', 'string', 'max:50'],
+            'course' => ['nullable', 'string', 'max:150'],
+            'courseDept' => ['nullable', 'string', 'max:150'],
+            'course_dept' => ['nullable', 'string', 'max:150'],
+            'block' => ['nullable', 'string', 'max:50'],
+            'address' => ['nullable', 'string', 'max:500'],
+            'nationality' => ['nullable', 'string', 'max:100'],
             'contact' => ['nullable', 'string', 'max:50'],
+            'phone' => ['nullable', 'string', 'max:50'],
+            'emergencyContactName' => ['nullable', 'string', 'max:150'],
+            'emergency_contact_name' => ['nullable', 'string', 'max:150'],
+            'emergencyContactPhone' => ['nullable', 'string', 'max:50'],
+            'emergency_contact_phone' => ['nullable', 'string', 'max:50'],
             'emergencyContact' => ['nullable', 'string', 'max:255'],
         ]);
 
+        $firstName = $validated['firstName'] ?? $validated['first_name'] ?? $patient->first_name;
+        $middleName = $validated['middleName'] ?? $validated['middle_name'] ?? $patient->middle_name;
+        $lastName = $validated['lastName'] ?? $validated['last_name'] ?? $patient->last_name;
+        $studentId = $validated['studentId'] ?? $validated['student_id'] ?? null;
+        $course = $validated['course'] ?? $validated['courseDept'] ?? $validated['course_dept'] ?? $patient->course_dept;
+        $phone = $validated['phone'] ?? $validated['contact'] ?? $patient->contact;
+        $emergName = $validated['emergencyContactName'] ?? $validated['emergency_contact_name'] ?? $patient->emergency_contact_name;
+        $emergPhone = $validated['emergencyContactPhone'] ?? $validated['emergency_contact_phone'] ?? $patient->emergency_contact_phone;
+
         $updateData = [];
-        if (array_key_exists('contact', $validated)) {
-            $updateData['contact'] = $validated['contact'] ?? '';
-        }
-        if (array_key_exists('emergencyContact', $validated)) {
+        if ($firstName !== null) $updateData['first_name'] = $firstName;
+        if ($middleName !== null) $updateData['middle_name'] = $middleName;
+        if ($lastName !== null) $updateData['last_name'] = $lastName;
+        if (array_key_exists('age', $validated)) $updateData['age'] = $validated['age'];
+        if ($course !== null) $updateData['course_dept'] = $course;
+        if (array_key_exists('block', $validated)) $updateData['block'] = $validated['block'];
+        if (array_key_exists('address', $validated)) $updateData['address'] = $validated['address'];
+        if (array_key_exists('nationality', $validated)) $updateData['nationality'] = $validated['nationality'];
+        if ($phone !== null) $updateData['contact'] = $phone;
+        if ($emergName !== null) $updateData['emergency_contact_name'] = $emergName;
+        if ($emergPhone !== null) $updateData['emergency_contact_phone'] = $emergPhone;
+
+        // Sync emergency contact string representation
+        if ($emergName || $emergPhone) {
+            $updateData['emergency_contact'] = trim(($emergName ?? '') . ($emergPhone ? " ({$emergPhone})" : ''));
+        } elseif (array_key_exists('emergencyContact', $validated)) {
             $updateData['emergency_contact'] = $validated['emergencyContact'] ?? '';
+        }
+
+        // Sync composite name if first/last are provided
+        if ($firstName && $lastName) {
+            $fullName = trim($firstName . ($middleName ? " {$middleName} " : ' ') . $lastName);
+            $updateData['name'] = $fullName;
+            $request->user()->update(['name' => $fullName]);
+        }
+
+        // Update studentId if provided and unique
+        if ($studentId && $studentId !== $patient->patient_id) {
+            $exists = Patient::where('patient_id', $studentId)->where('id', '!=', $patient->id)->exists();
+            if (! $exists) {
+                $updateData['patient_id'] = $studentId;
+                $request->user()->update(['patient_id' => $studentId]);
+            }
         }
 
         if (! empty($updateData)) {
