@@ -27,6 +27,7 @@ class SystemSetting extends Model
     {
         return static::firstOrCreate([], [
             'clinic_name' => 'Trinidad Municipal College Clinic',
+            'clinic_address' => 'Tagum Norte, Trinidad, Bohol, Philippines',
             'clinic_hours' => '8:00 AM - 5:00 PM',
             'clinic_days' => 'Monday - Friday',
             'online_appointments_enabled' => true,

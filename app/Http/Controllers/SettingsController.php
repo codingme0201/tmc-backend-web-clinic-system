@@ -16,6 +16,29 @@ class SettingsController extends Controller
 
     public function update(Request $request): SystemSettingResource|JsonResponse
     {
+        $mappings = [
+            'clinicName' => 'clinic_name',
+            'clinicAddress' => 'clinic_address',
+            'clinicPhone' => 'clinic_phone',
+            'clinicEmail' => 'clinic_email',
+            'clinicHours' => 'clinic_hours',
+            'clinicDays' => 'clinic_days',
+            'clinicDescription' => 'clinic_description',
+            'emergencyHotline' => 'emergency_hotline',
+            'onlineAppointmentsEnabled' => 'online_appointments_enabled',
+            'appointmentBufferMinutes' => 'appointment_buffer_minutes',
+            'maxDailyAppointments' => 'max_daily_appointments',
+            'notificationSettings' => 'notification_settings',
+        ];
+
+        $input = $request->all();
+        foreach ($mappings as $camel => $snake) {
+            if (array_key_exists($camel, $input) && !array_key_exists($snake, $input)) {
+                $input[$snake] = $input[$camel];
+            }
+        }
+        $request->merge($input);
+
         $validated = $request->validate([
             'clinic_name' => ['sometimes', 'string', 'max:255'],
             'clinic_address' => ['nullable', 'string', 'max:500'],

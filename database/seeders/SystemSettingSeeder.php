@@ -11,7 +11,7 @@ class SystemSettingSeeder extends Seeder
     {
         SystemSetting::firstOrCreate([], [
             'clinic_name' => 'Trinidad Municipal College Clinic',
-            'clinic_address' => 'Trinidad, Quezon Province, Philippines',
+            'clinic_address' => 'Tagum Norte, Trinidad, Bohol, Philippines',
             'clinic_phone' => '+63 42 123 4567',
             'clinic_email' => 'clinic@trinidadmc.edu.ph',
             'clinic_hours' => '8:00 AM - 5:00 PM',
