@@ -8,7 +8,13 @@ use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\Rules\Password;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class AuthController extends Controller
 {
@@ -94,7 +100,7 @@ class AuthController extends Controller
     {
         $validated = $request->validate([
             'currentPassword' => ['required', 'string'],
-            'newPassword' => ['required', 'string', 'min:6'],
+            'newPassword' => ['required', 'string', Password::min(8), 'different:currentPassword'],
         ]);
 
         $user = $request->user();
@@ -106,6 +112,11 @@ class AuthController extends Controller
         $user->update([
             'password' => $validated['newPassword'],
         ]);
+
+        // Sign out every other device; the current session keeps its token.
+        $currentToken = $user->currentAccessToken();
+        $currentTokenId = $currentToken instanceof PersonalAccessToken ? $currentToken->id : null;
+        $user->tokens()->when($currentTokenId, fn ($q) => $q->where('id', '!=', $currentTokenId))->delete();
 
         return response()->json(['message' => 'Password updated successfully.']);
     }
@@ -124,7 +135,7 @@ class AuthController extends Controller
             'last_name' => ['nullable', 'string', 'max:100'],
             'lastName' => ['nullable', 'string', 'max:100'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:6'],
+            'password' => ['required', 'string', Password::min(8)],
             'patient_id' => ['nullable', 'string', 'max:50'],
             'student_id' => ['nullable', 'string', 'max:50'],
             'studentId' => ['nullable', 'string', 'max:50'],
@@ -157,8 +168,18 @@ class AuthController extends Controller
             $name = $firstName ?? 'Student User';
         }
 
+        // Never link a self-registered account to an existing patient record:
+        // anyone who knew a student ID could otherwise read that student's
+        // medical records. Existing records are linked by clinic staff.
+        if ($patientId && (Patient::where('patient_id', $patientId)->exists() || Patient::idHasClinicalRecords($patientId))) {
+            return response()->json([
+                'message' => 'This student ID already has a clinic record. Please visit the clinic to have your account linked.',
+                'errors' => ['studentId' => ['This student ID is already registered.']],
+            ], 422);
+        }
+
         if (! $patientId) {
-            $patientId = 'STU-' . date('y') . '-' . str_pad((string) mt_rand(1, 999999), 6, '0', STR_PAD_LEFT);
+            $patientId = Patient::generatePlaceholderId();
         }
 
         $course = $validated['course'] ?? $validated['courseDept'] ?? $validated['course_dept'] ?? 'General';
@@ -167,26 +188,25 @@ class AuthController extends Controller
         $emergPhone = $validated['emergencyContactPhone'] ?? $validated['emergency_contact_phone'] ?? null;
         $emergContact = $emergName || $emergPhone ? trim(($emergName ?? '') . ($emergPhone ? " ({$emergPhone})" : '')) : null;
 
-        $patient = Patient::firstOrCreate(
-            ['patient_id' => $patientId],
-            [
-                'name' => $name,
-                'first_name' => $firstName,
-                'middle_name' => $middleName,
-                'last_name' => $lastName,
-                'age' => $validated['age'] ?? null,
-                'type' => $validated['type'] ?? 'Student',
-                'course_dept' => $course,
-                'block' => $validated['block'] ?? null,
-                'address' => $validated['address'] ?? null,
-                'nationality' => $validated['nationality'] ?? 'Filipino',
-                'contact' => $phone,
-                'emergency_contact_name' => $emergName,
-                'emergency_contact_phone' => $emergPhone,
-                'emergency_contact' => $emergContact ?? '',
-                'status' => 'Active',
-            ]
-        );
+        $patient = Patient::create([
+            'patient_id' => $patientId,
+            'name' => $name,
+            'first_name' => $firstName,
+            'middle_name' => $middleName,
+            'last_name' => $lastName,
+            'age' => $validated['age'] ?? null,
+            'type' => $validated['type'] ?? 'Student',
+            'course_dept' => $course,
+            'block' => $validated['block'] ?? null,
+            'address' => $validated['address'] ?? null,
+            'nationality' => $validated['nationality'] ?? 'Filipino',
+            'contact' => $phone,
+            'emergency_contact_name' => $emergName,
+            'emergency_contact_phone' => $emergPhone,
+            'emergency_contact' => $emergContact ?? '',
+            'status' => 'Active',
+        ]);
+        $patient->ensureMedicalRecord();
 
         $studentRole = Role::where('name', 'student')->first()
             ?? Role::where('name', 'patient')->first()
@@ -211,17 +231,97 @@ class AuthController extends Controller
     }
 
     /**
-     * Handle forgot password reset request.
+     * Email a 6-digit password reset code.
+     *
+     * A short code (instead of a link) works for both the mobile app and the
+     * web portal. Only its hash is stored in password_reset_tokens, and the
+     * response is identical whether or not the email exists.
      */
     public function forgotPassword(Request $request): JsonResponse
     {
-        $request->validate([
+        $validated = $request->validate([
             'email' => ['required', 'string', 'email'],
         ]);
 
+        $user = User::where('email', $validated['email'])->first();
+
+        if ($user && $user->status === 'active') {
+            $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+
+            DB::table('password_reset_tokens')->updateOrInsert(
+                ['email' => $user->email],
+                ['token' => Hash::make($code), 'created_at' => now()],
+            );
+            Cache::forget($this->resetAttemptsKey($user->email));
+
+            try {
+                Mail::raw(
+                    "Your TMC CareLink password reset code is {$code}.\n\n"
+                    .'It expires in '.self::RESET_CODE_TTL_MINUTES." minutes. If you did not request this, you can ignore this email.",
+                    fn ($message) => $message->to($user->email)->subject('TMC CareLink password reset code'),
+                );
+            } catch (\Throwable $e) {
+                Log::error('Failed to send password reset code.', ['email' => $user->email, 'error' => $e->getMessage()]);
+            }
+        }
+
         return response()->json([
-            'message' => 'If an account exists with this email address, password reset instructions will be sent.',
+            'message' => 'If an account exists with this email address, a password reset code has been sent.',
         ]);
+    }
+
+    /**
+     * Reset a password with the emailed code.
+     *
+     * Codes expire after RESET_CODE_TTL_MINUTES and are invalidated after
+     * RESET_MAX_ATTEMPTS wrong guesses. All of the user's tokens are revoked.
+     */
+    public function resetPassword(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'email' => ['required', 'string', 'email'],
+            'code' => ['required', 'string', 'size:6'],
+            'password' => ['required', 'string', Password::min(8), 'confirmed'],
+        ]);
+
+        $invalid = fn () => response()->json([
+            'message' => 'The reset code is invalid or has expired.',
+            'errors' => ['code' => ['The reset code is invalid or has expired.']],
+        ], 422);
+
+        $row = DB::table('password_reset_tokens')->where('email', $validated['email'])->first();
+        $user = User::where('email', $validated['email'])->first();
+
+        if (! $row || ! $user || now()->diffInMinutes($row->created_at, true) > self::RESET_CODE_TTL_MINUTES) {
+            return $invalid();
+        }
+
+        if (! Hash::check($validated['code'], $row->token)) {
+            $attemptsKey = $this->resetAttemptsKey($user->email);
+            $attempts = Cache::increment($attemptsKey);
+            if ($attempts >= self::RESET_MAX_ATTEMPTS) {
+                DB::table('password_reset_tokens')->where('email', $user->email)->delete();
+                Cache::forget($attemptsKey);
+            }
+
+            return $invalid();
+        }
+
+        $user->update(['password' => $validated['password']]);
+        $user->tokens()->delete();
+        DB::table('password_reset_tokens')->where('email', $user->email)->delete();
+        Cache::forget($this->resetAttemptsKey($user->email));
+
+        return response()->json(['message' => 'Your password has been reset. You can now log in.']);
+    }
+
+    private const RESET_CODE_TTL_MINUTES = 30;
+
+    private const RESET_MAX_ATTEMPTS = 5;
+
+    private function resetAttemptsKey(string $email): string
+    {
+        return 'password-reset-attempts:'.strtolower($email);
     }
 
     /**

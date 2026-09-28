@@ -7,6 +7,7 @@ use App\Http\Requests\StoreConsultationRequest;
 use App\Http\Requests\UpdateConsultationRequest;
 use App\Http\Resources\ConsultationResource;
 use App\Models\Consultation;
+use App\Models\Patient;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -212,18 +213,53 @@ class ConsultationController extends Controller
 
         $validated = $request->validated();
 
-        $consultation->update([
-            'staff' => $validated['staff'] ?? $consultation->staff,
-            'chief_complaint' => $validated['chiefComplaint'],
-            'vitals' => $validated['vitals'] ?? $consultation->vitals,
-            'clinical_findings' => $validated['clinicalFindings'] ?? $consultation->clinical_findings,
-            'diagnosis' => $validated['diagnosis'],
-            'treatment' => $validated['treatment'],
-            'disposition' => $validated['disposition'] ?? $consultation->disposition,
-            'status' => 'Completed',
-            'completed_at' => now()->format('Y-m-d h:i A'),
-        ]);
+        DB::transaction(function () use ($consultation, $validated) {
+            $consultation->update([
+                'staff' => $validated['staff'] ?? $consultation->staff,
+                'chief_complaint' => $validated['chiefComplaint'],
+                'vitals' => $validated['vitals'] ?? $consultation->vitals,
+                'clinical_findings' => $validated['clinicalFindings'] ?? $consultation->clinical_findings,
+                'diagnosis' => $validated['diagnosis'],
+                'treatment' => $validated['treatment'],
+                'disposition' => $validated['disposition'] ?? $consultation->disposition,
+                'status' => 'Completed',
+                'completed_at' => now()->format('Y-m-d h:i A'),
+            ]);
+
+            $this->recordInMedicalHistory($consultation);
+        });
 
         return new ConsultationResource($consultation);
+    }
+
+    /**
+     * Add the completed consultation to the patient's medical record history
+     * (creating the record if needed), so the record reflects clinic visits.
+     */
+    private function recordInMedicalHistory(Consultation $consultation): void
+    {
+        if (! $consultation->patient_id) {
+            return;
+        }
+
+        $patient = Patient::where('patient_id', $consultation->patient_id)->first();
+        if (! $patient) {
+            return;
+        }
+
+        $record = $patient->ensureMedicalRecord();
+        $notes = collect([
+            $consultation->reference ? "Consultation {$consultation->reference}" : null,
+            $consultation->chief_complaint ? "Complaint: {$consultation->chief_complaint}" : null,
+            $consultation->treatment ? "Treatment: {$consultation->treatment}" : null,
+            $consultation->staff ? "Attended by {$consultation->staff}" : null,
+        ])->filter()->implode("\n");
+
+        $record->histories()->create([
+            'date' => $consultation->date?->format('Y-m-d') ?? now()->toDateString(),
+            'condition' => $consultation->diagnosis ?: ($consultation->chief_complaint ?: 'Clinic consultation'),
+            'notes' => $notes,
+        ]);
+        $record->update(['last_updated' => now()->toDateString()]);
     }
 }

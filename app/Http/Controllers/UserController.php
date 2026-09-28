@@ -76,6 +76,10 @@ class UserController extends Controller
             $name = trim($firstName . ($middleName ? " {$middleName} " : ' ') . $lastName);
         }
 
+        if ($studentId && ($conflict = $this->studentIdConflict($studentId, null, null))) {
+            return $conflict;
+        }
+
         $user = User::create([
             'name' => $name ?? 'New User',
             'email' => $validated['email'],
@@ -90,7 +94,7 @@ class UserController extends Controller
         // If user is a student or student fields were provided, create or update the Patient record
         $isStudentRole = $user->role && in_array($user->role->name, ['student', 'patient']);
         if ($isStudentRole || $studentId || $firstName) {
-            $patientId = $studentId ?: ($user->patient_id ?: ('STU-' . date('y') . '-' . str_pad((string) mt_rand(1, 999999), 6, '0', STR_PAD_LEFT)));
+            $patientId = $studentId ?: ($user->patient_id ?: Patient::generatePlaceholderId());
             $course = $validated['course'] ?? $validated['courseDept'] ?? $validated['course_dept'] ?? 'General';
             $phone = $validated['phone'] ?? $validated['contact'] ?? null;
             $emergName = $validated['emergencyContactName'] ?? $validated['emergency_contact_name'] ?? null;
@@ -115,6 +119,7 @@ class UserController extends Controller
             }
             $patient->status = $user->status === 'inactive' ? 'Inactive' : 'Active';
             $patient->save();
+            $patient->ensureMedicalRecord();
 
             $user->update(['patient_id' => $patient->patient_id]);
         }
@@ -127,7 +132,7 @@ class UserController extends Controller
     /**
      * Update a user's account information (name, email).
      */
-    public function update(UpdateUserRequest $request, User $user): UserResource
+    public function update(UpdateUserRequest $request, User $user): UserResource|JsonResponse
     {
         $validated = $request->validated();
 
@@ -141,21 +146,30 @@ class UserController extends Controller
             $name = trim($firstName . ($middleName ? " {$middleName} " : ' ') . $lastName);
         }
 
+        // Resolve the currently linked patient before anything changes, so a
+        // student ID edit renames that record instead of creating a new one.
+        $originalPatient = $user->patient;
+
+        if ($studentId && $studentId !== $user->patient_id) {
+            if ($conflict = $this->studentIdConflict($studentId, $user, $originalPatient)) {
+                return $conflict;
+            }
+        }
+
         $user->update([
             'name' => $name ?? $user->name,
             'email' => $validated['email'] ?? $user->email,
-            'patient_id' => $studentId !== null ? $studentId : $user->patient_id,
         ]);
 
         $user->load('role');
 
         // If user has a patient or has student role or detailed fields provided
         $isStudentRole = $user->role && in_array($user->role->name, ['student', 'patient']);
-        if ($isStudentRole || $user->patient_id || $firstName) {
-            $patientId = $studentId ?: ($user->patient_id ?: ('STU-' . date('y') . '-' . str_pad((string) mt_rand(1, 999999), 6, '0', STR_PAD_LEFT)));
-            $patient = $user->patient ?: Patient::firstOrNew(['patient_id' => $patientId]);
-            if ($studentId && $studentId !== $patient->patient_id) {
-                $patient->patient_id = $studentId;
+        if ($isStudentRole || $user->patient_id || $studentId || $firstName) {
+            $patientId = $studentId ?: ($user->patient_id ?: Patient::generatePlaceholderId());
+            $patient = $originalPatient ?: Patient::firstOrNew(['patient_id' => $patientId]);
+            if ($studentId && $patient->exists && $studentId !== $patient->patient_id) {
+                $patient->renamePatientId($studentId);
             }
             if ($name) $patient->name = $name;
             if ($firstName !== null) $patient->first_name = $firstName;
@@ -177,6 +191,7 @@ class UserController extends Controller
                 $patient->emergency_contact = trim(($emergName ?? '') . ($emergPhone ? " ({$emergPhone})" : ''));
             }
             $patient->save();
+            $patient->ensureMedicalRecord();
 
             if ($user->patient_id !== $patient->patient_id) {
                 $user->update(['patient_id' => $patient->patient_id]);
@@ -184,6 +199,28 @@ class UserController extends Controller
         }
 
         return new UserResource($user->fresh(['role', 'patient']));
+    }
+
+    /**
+     * Reject a student ID that would merge two patients or share one patient
+     * record between two accounts.
+     */
+    private function studentIdConflict(string $studentId, ?User $user, ?Patient $currentPatient): ?JsonResponse
+    {
+        $takenByOtherPatient = $currentPatient
+            && Patient::where('patient_id', $studentId)->where('id', '!=', $currentPatient->id)->exists();
+        $linkedToOtherUser = User::where('patient_id', $studentId)
+            ->when($user, fn ($q) => $q->where('id', '!=', $user->id))
+            ->exists();
+
+        if ($takenByOtherPatient || $linkedToOtherUser) {
+            return response()->json([
+                'message' => 'This student ID already belongs to another patient or account.',
+                'errors' => ['studentId' => ['This student ID is already in use.']],
+            ], 422);
+        }
+
+        return null;
     }
 
     /**
@@ -199,6 +236,11 @@ class UserController extends Controller
         }
 
         $user->update(['status' => $request->validated('status')]);
+
+        // A deactivated account must lose access immediately, not just at next login.
+        if ($user->status !== 'active') {
+            $user->tokens()->delete();
+        }
 
         return new UserResource($user->fresh('role'));
     }
@@ -224,7 +266,36 @@ class UserController extends Controller
         $user->update([
             'password' => $request->validated('password'),
         ]);
+        $user->tokens()->delete();
 
         return response()->json(['message' => 'Password has been reset successfully.']);
+    }
+
+    /**
+     * Soft-delete a user account and revoke its tokens.
+     *
+     * The linked patient record (and its clinical history) is kept. Admins
+     * cannot delete themselves or the last active administrator.
+     */
+    public function destroy(Request $request, User $user): JsonResponse
+    {
+        if ($request->user()->id === $user->id) {
+            return response()->json(['message' => 'You cannot delete your own account.'], 409);
+        }
+
+        if ($user->role?->name === 'admin') {
+            $otherAdmins = User::where('id', '!=', $user->id)
+                ->where('status', 'active')
+                ->whereHas('role', fn ($q) => $q->where('name', 'admin'))
+                ->exists();
+            if (! $otherAdmins) {
+                return response()->json(['message' => 'You cannot delete the last active administrator.'], 409);
+            }
+        }
+
+        $user->tokens()->delete();
+        $user->delete();
+
+        return response()->json(['message' => 'User deleted successfully.']);
     }
 }

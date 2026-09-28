@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -18,7 +19,13 @@ use Laravel\Sanctum\HasApiTokens;
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, Notifiable, SoftDeletes;
+
+    /**
+     * Roles that use the mobile self-service app (the `/api/me/*` routes)
+     * instead of the web clinic system.
+     */
+    public const PATIENT_ROLES = ['student', 'patient'];
 
     /**
      * Get the attributes that should be cast.
@@ -59,6 +66,14 @@ class User extends Authenticatable
     public function unavailableSchedules(): HasMany
     {
         return $this->hasMany(UnavailableSchedule::class, 'created_by');
+    }
+
+    /**
+     * Whether this user is a student/patient (mobile self-service) account.
+     */
+    public function isPatientUser(): bool
+    {
+        return in_array($this->role?->name, self::PATIENT_ROLES, true);
     }
 
     /**

@@ -14,6 +14,31 @@ class SettingsController extends Controller
         return new SystemSettingResource(SystemSetting::getInstance());
     }
 
+    /**
+     * Public clinic details for the student mobile app.
+     *
+     * Internal configuration (notification settings, booking buffer, daily
+     * cap) stays on the staff-only /settings endpoint.
+     */
+    public function publicInfo(): JsonResponse
+    {
+        $settings = SystemSetting::getInstance();
+
+        return response()->json([
+            'data' => [
+                'clinicName' => $settings->clinic_name,
+                'clinicAddress' => $settings->clinic_address,
+                'clinicPhone' => $settings->clinic_phone,
+                'clinicEmail' => $settings->clinic_email,
+                'clinicHours' => $settings->clinic_hours,
+                'clinicDays' => $settings->clinic_days,
+                'clinicDescription' => $settings->clinic_description,
+                'emergencyHotline' => $settings->emergency_hotline,
+                'onlineAppointmentsEnabled' => (bool) $settings->online_appointments_enabled,
+            ],
+        ]);
+    }
+
     public function update(Request $request): SystemSettingResource|JsonResponse
     {
         $mappings = [

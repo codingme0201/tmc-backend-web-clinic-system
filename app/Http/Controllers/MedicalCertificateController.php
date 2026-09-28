@@ -91,11 +91,11 @@ class MedicalCertificateController extends Controller
             'diagnosis' => ['nullable', 'string'],
         ]);
 
-        // Enforce that the student must have an accomplished clinic consultation
-        $completedConsultations = \App\Models\Consultation::where(function ($q) use ($patient) {
-            $q->where('patient_id', $patient->patient_id)
-                ->orWhere('patient', $patient->name);
-        })->where('status', 'Completed')->latest('date')->get();
+        // Enforce that the student must have an accomplished clinic consultation.
+        // Matched by patient ID only — names are not unique, so a name match
+        // could attach another patient's consultation to this certificate.
+        $completedConsultations = \App\Models\Consultation::where('patient_id', $patient->patient_id)
+            ->where('status', 'Completed')->latest('date')->get();
 
         if ($completedConsultations->isEmpty()) {
             return response()->json([

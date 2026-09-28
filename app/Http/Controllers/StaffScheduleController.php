@@ -16,6 +16,44 @@ use Illuminate\Support\Facades\DB;
 class StaffScheduleController extends Controller
 {
     /**
+     * Upcoming doctor/nurse availability for the student mobile app.
+     *
+     * Only `Available` entries from today through the next 30 days are
+     * returned, grouped per staff member, without internal notes or IDs of
+     * unavailable slots.
+     */
+    public function publicIndex(): JsonResponse
+    {
+        $today = now()->toDateString();
+
+        $schedules = StaffSchedule::with('user.role')
+            ->where('status', 'Available')
+            ->whereBetween('date', [$today, now()->addDays(30)->toDateString()])
+            ->whereHas('user', fn ($q) => $q->where('status', 'active'))
+            ->orderBy('date')
+            ->orderBy('start_time')
+            ->get();
+
+        $data = $schedules->groupBy('user_id')->map(function ($entries) {
+            $user = $entries->first()->user;
+
+            return [
+                'id' => $user->id,
+                'name' => $user->name,
+                'role' => $user->role?->name,
+                'schedule' => $entries->map(fn ($s) => [
+                    'day' => $s->date?->format('l, M j'),
+                    'date' => $s->date?->format('Y-m-d'),
+                    'startTime' => $s->start_time,
+                    'endTime' => $s->end_time,
+                ])->values()->all(),
+            ];
+        })->values()->all();
+
+        return response()->json(['data' => $data]);
+    }
+
+    /**
      * List staff schedules with optional filtering.
      *
      * Supports filtering by user_id, date, date_from, date_to, status,

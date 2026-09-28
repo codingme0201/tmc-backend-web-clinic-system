@@ -8,12 +8,14 @@ use App\Http\Requests\UpdateAppointmentStatusRequest;
 use App\Http\Resources\AppointmentResource;
 use App\Models\Appointment;
 use App\Models\Notification;
+use App\Models\SystemSetting;
 use App\Models\UnavailableSchedule;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class AppointmentController extends Controller
 {
@@ -47,26 +49,50 @@ class AppointmentController extends Controller
             abort(404, 'No patient record associated with this user.');
         }
 
+        if (! SystemSetting::getInstance()->online_appointments_enabled) {
+            return response()->json([
+                'message' => 'Online appointment requests are currently disabled. Please contact or visit the clinic.',
+            ], 422);
+        }
+
         $validated = $request->validate([
-            'type' => ['required', 'string'],
-            'reason' => ['required', 'string'],
-            'date' => ['required', 'date', 'after_or_equal:today'],
-            'time' => ['required', 'string'],
-            'staff' => ['nullable', 'string'],
+            'type' => ['required', 'string', Rule::in(Appointment::TYPES)],
+            'reason' => ['required', 'string', 'max:1000'],
+            'date' => ['required', 'date_format:Y-m-d', 'after_or_equal:today'],
+            'time' => ['required', 'string', Rule::in(Appointment::TIME_SLOTS)],
+            'staff_id' => ['nullable', 'integer'],
+            'staff' => ['nullable', 'string', 'max:255'],
         ]);
+
+        // Prefer the staff user ID (from /me/appointment-options); the name
+        // field is kept for older app builds.
+        $staffUser = null;
+        if (! empty($validated['staff_id'])) {
+            $staffUser = $this->bookableStaffQuery()->find($validated['staff_id']);
+            if (! $staffUser) {
+                return response()->json([
+                    'message' => 'The selected doctor/nurse is not available for booking.',
+                    'errors' => ['staff_id' => ['The selected doctor/nurse is invalid.']],
+                ], 422);
+            }
+        } elseif (! empty($validated['staff'])) {
+            $staffUser = $this->bookableStaffQuery()->where('name', $validated['staff'])->first();
+        }
+        $staffName = $staffUser?->name ?? ($validated['staff'] ?? '');
 
         if ($conflict = $this->checkAppointmentConflict(
             $validated['date'],
             $validated['time'],
-            $validated['staff'] ?? null,
-            $patient->patient_id
+            $staffName,
+            $patient->patient_id,
+            null,
+            true,
         )) {
             return $conflict;
         }
 
-        $appointment = DB::transaction(function () use ($request, $validated, $patient) {
-            $staffName = $validated['staff'] ?? '';
-            $staffId = $staffName ? User::where('name', $staffName)->value('id') : null;
+        $appointment = DB::transaction(function () use ($validated, $patient, $staffName, $staffUser) {
+            $staffId = $staffUser?->id;
 
             return Appointment::create([
                 'patient' => $patient->name,
@@ -101,6 +127,87 @@ class AppointmentController extends Controller
     }
 
     /**
+     * Booking options for the mobile Request Appointment form: appointment
+     * types, time slots and the active doctors/nurses (by user ID).
+     */
+    public function appointmentOptions(): JsonResponse
+    {
+        $settings = SystemSetting::getInstance();
+
+        return response()->json([
+            'data' => [
+                'types' => Appointment::TYPES,
+                'timeSlots' => Appointment::TIME_SLOTS,
+                'doctors' => $this->bookableStaffQuery()->with('role')->orderBy('name')->get()
+                    ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name, 'role' => $u->role?->name])
+                    ->values(),
+                'onlineAppointmentsEnabled' => (bool) $settings->online_appointments_enabled,
+            ],
+        ]);
+    }
+
+    /**
+     * Slot availability for a date (and optionally a doctor/nurse), so the
+     * mobile app can disable taken, blocked and full slots before submitting.
+     *
+     * Only availability is exposed — never who holds a slot.
+     */
+    public function availability(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'date' => ['required', 'date_format:Y-m-d'],
+            'staff_id' => ['nullable', 'integer'],
+        ]);
+
+        $date = $validated['date'];
+        $patientId = $request->user()->patient?->patient_id;
+        $settings = SystemSetting::getInstance();
+        $buffer = (int) $settings->appointment_buffer_minutes;
+        $staffName = ! empty($validated['staff_id'])
+            ? $this->bookableStaffQuery()->whereKey($validated['staff_id'])->value('name')
+            : null;
+
+        $blocks = UnavailableSchedule::whereDate('start_date', '<=', $date)
+            ->whereDate('end_date', '>=', $date)
+            ->get();
+        $active = $this->activeAppointmentsOn($date)->get(['time', 'staff', 'patient_id']);
+        $isFull = $this->isDayFull($date, $settings);
+        $isPast = $date < now()->toDateString();
+
+        $slots = collect(Appointment::TIME_SLOTS)->map(function (string $slot) use ($blocks, $active, $staffName, $patientId, $buffer, $isFull, $isPast) {
+            $minutes = self::timeToMinutes($slot);
+            $reason = match (true) {
+                $isPast => 'past',
+                $blocks->contains(fn ($b) => self::blockCovers($b, $minutes)) => 'blocked',
+                $patientId && $active->contains(fn ($a) => $a->patient_id === $patientId && self::timesOverlap($a->time, $slot, 0)) => 'yours',
+                $staffName && $active->contains(fn ($a) => $a->staff === $staffName && self::timesOverlap($a->time, $slot, $buffer)) => 'booked',
+                $isFull => 'full',
+                default => null,
+            };
+
+            return ['time' => $slot, 'available' => $reason === null, 'reason' => $reason];
+        })->values();
+
+        return response()->json([
+            'data' => [
+                'date' => $date,
+                'onlineAppointmentsEnabled' => (bool) $settings->online_appointments_enabled,
+                'isFull' => $isFull,
+                'slots' => $slots,
+            ],
+        ]);
+    }
+
+    /**
+     * Active doctor/nurse accounts that students may book.
+     */
+    private function bookableStaffQuery()
+    {
+        return User::where('status', 'active')
+            ->whereHas('role', fn ($q) => $q->whereIn('name', ['doctor', 'nurse']));
+    }
+
+    /**
      * Show a single appointment for the authenticated patient.
      */
     public function showMyAppointment(Appointment $appointment, Request $request): AppointmentResource
@@ -132,9 +239,9 @@ class AppointmentController extends Controller
         }
 
         $validated = $request->validate([
-            'date' => ['required', 'date', 'after_or_equal:today'],
-            'time' => ['required', 'string'],
-            'reason' => ['nullable', 'string'],
+            'date' => ['required', 'date_format:Y-m-d', 'after_or_equal:today'],
+            'time' => ['required', 'string', Rule::in(Appointment::TIME_SLOTS)],
+            'reason' => ['nullable', 'string', 'max:1000'],
         ]);
 
         $date = $validated['date'];
@@ -146,7 +253,8 @@ class AppointmentController extends Controller
             $time,
             $appointment->staff,
             $patient->patient_id,
-            $appointment->id
+            $appointment->id,
+            true,
         )) {
             return $conflict;
         }
@@ -491,45 +599,55 @@ class AppointmentController extends Controller
     }
 
     /**
+     * Statuses that occupy a slot.
+     */
+    private const ACTIVE_STATUSES = ['Pending', 'Under Review', 'Approved', 'Rescheduled'];
+
+    /**
      * Check if an appointment booking collides with an existing appointment
      * or a blocked clinic/doctor schedule.
+     *
+     * Times are compared as minutes after midnight, so "01:00 PM" (slot
+     * format) and "13:00" (block format) compare correctly. The staff check
+     * honours the appointment buffer from System Settings, and the daily cap
+     * is applied when $enforceDailyLimit is set (student self-service).
      */
     protected function checkAppointmentConflict(
         string $date,
         string $time,
         ?string $staff = null,
         ?string $patientId = null,
-        ?int $ignoreAppointmentId = null
+        ?int $ignoreAppointmentId = null,
+        bool $enforceDailyLimit = false,
     ): ?JsonResponse {
-        // 1. Check if the clinic schedule is blocked in UnavailableSchedule
-        $isBlocked = UnavailableSchedule::where('start_date', '<=', $date)
-            ->where('end_date', '>=', $date)
-            ->where(function ($q) use ($time) {
-                $q->where('all_day', true)
-                    ->orWhere(function ($sub) use ($time) {
-                        $sub->whereNotNull('start_time')
-                            ->whereNotNull('end_time')
-                            ->where('start_time', '<=', $time)
-                            ->where('end_time', '>=', $time);
-                    });
-            })
-            ->exists();
+        $settings = SystemSetting::getInstance();
+        $minutes = self::timeToMinutes($time);
 
-        if ($isBlocked) {
+        // 1. Clinic schedule blocks
+        $blocks = UnavailableSchedule::whereDate('start_date', '<=', $date)
+            ->whereDate('end_date', '>=', $date)
+            ->get();
+
+        if ($blocks->contains(fn ($block) => self::blockCovers($block, $minutes))) {
             return response()->json([
                 'message' => 'The selected date or time slot is unavailable due to a clinic schedule block.',
             ], 422);
         }
 
-        // 2. Check if the staff/doctor already has an active appointment at that date & time
+        // 2. Daily appointment cap
+        if ($enforceDailyLimit && $this->isDayFull($date, $settings, $ignoreAppointmentId)) {
+            return response()->json([
+                'message' => "The clinic has reached its maximum number of appointments for {$date}. Please choose another date.",
+            ], 422);
+        }
+
+        // 3. The staff member already has an active appointment within the buffer window
         $cleanStaff = trim((string) $staff);
         if ($cleanStaff !== '' && strtolower($cleanStaff) !== 'any available') {
-            $staffConflict = Appointment::where('date', $date)
-                ->where('time', $time)
+            $staffConflict = $this->activeAppointmentsOn($date, $ignoreAppointmentId)
                 ->where('staff', $cleanStaff)
-                ->whereIn('status', ['Pending', 'Under Review', 'Approved', 'Rescheduled'])
-                ->when($ignoreAppointmentId, fn ($q) => $q->where('id', '!=', $ignoreAppointmentId))
-                ->exists();
+                ->get(['time'])
+                ->contains(fn ($a) => self::timesOverlap($a->time, $time, (int) $settings->appointment_buffer_minutes));
 
             if ($staffConflict) {
                 return response()->json([
@@ -538,14 +656,12 @@ class AppointmentController extends Controller
             }
         }
 
-        // 3. Check if the patient already has an active appointment at that date & time
+        // 4. The patient already has an active appointment at that date & time
         if ($patientId) {
-            $patientConflict = Appointment::where('date', $date)
-                ->where('time', $time)
+            $patientConflict = $this->activeAppointmentsOn($date, $ignoreAppointmentId)
                 ->where('patient_id', $patientId)
-                ->whereIn('status', ['Pending', 'Under Review', 'Approved', 'Rescheduled'])
-                ->when($ignoreAppointmentId, fn ($q) => $q->where('id', '!=', $ignoreAppointmentId))
-                ->exists();
+                ->get(['time'])
+                ->contains(fn ($a) => self::timesOverlap($a->time, $time, 0));
 
             if ($patientConflict) {
                 return response()->json([
@@ -555,5 +671,80 @@ class AppointmentController extends Controller
         }
 
         return null;
+    }
+
+    /**
+     * Active appointments on a date, optionally excluding one appointment.
+     */
+    private function activeAppointmentsOn(string $date, ?int $ignoreAppointmentId = null)
+    {
+        return Appointment::whereDate('date', $date)
+            ->whereIn('status', self::ACTIVE_STATUSES)
+            ->when($ignoreAppointmentId, fn ($q) => $q->where('id', '!=', $ignoreAppointmentId));
+    }
+
+    /**
+     * Whether the date has reached System Settings' max_daily_appointments.
+     */
+    private function isDayFull(string $date, SystemSetting $settings, ?int $ignoreAppointmentId = null): bool
+    {
+        $max = (int) $settings->max_daily_appointments;
+
+        return $max > 0 && $this->activeAppointmentsOn($date, $ignoreAppointmentId)->count() >= $max;
+    }
+
+    /**
+     * Convert "01:30 PM", "13:30" or "13:30:00" to minutes after midnight.
+     */
+    private static function timeToMinutes(?string $time): ?int
+    {
+        if ($time === null || trim($time) === '') {
+            return null;
+        }
+
+        $parsed = date_parse($time);
+        if ($parsed['error_count'] > 0 || $parsed['hour'] === false) {
+            return null;
+        }
+
+        return $parsed['hour'] * 60 + (int) $parsed['minute'];
+    }
+
+    /**
+     * Whether two appointment times fall within $bufferMinutes of each other
+     * (exact match when the buffer is 0). Falls back to string equality when
+     * either time cannot be parsed.
+     */
+    private static function timesOverlap(?string $a, ?string $b, int $bufferMinutes): bool
+    {
+        $am = self::timeToMinutes($a);
+        $bm = self::timeToMinutes($b);
+
+        if ($am === null || $bm === null) {
+            return trim((string) $a) === trim((string) $b);
+        }
+
+        return abs($am - $bm) < max(1, $bufferMinutes);
+    }
+
+    /**
+     * Whether a schedule block covers the given time. All-day blocks (or
+     * blocks without both times) cover the whole day; timed blocks cover
+     * [start, end).
+     */
+    private static function blockCovers(UnavailableSchedule $block, ?int $minutes): bool
+    {
+        if ($block->all_day || ! $block->start_time || ! $block->end_time) {
+            return true;
+        }
+
+        $start = self::timeToMinutes($block->start_time);
+        $end = self::timeToMinutes($block->end_time);
+
+        if ($minutes === null || $start === null || $end === null) {
+            return true;
+        }
+
+        return $minutes >= $start && $minutes < $end;
     }
 }

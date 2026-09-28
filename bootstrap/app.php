@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Middleware\CheckPermission;
+use App\Http\Middleware\EnsurePatientUser;
+use App\Http\Middleware\EnsureStaffUser;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -22,7 +24,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->redirectGuestsTo('/login');
 
         // Module 2 — role/permission checks, e.g. `permission:roles.create`.
-        $middleware->alias(['permission' => CheckPermission::class]);
+        $middleware->alias([
+            'permission' => CheckPermission::class,
+            'patient.user' => EnsurePatientUser::class,
+            'staff.user' => EnsureStaffUser::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

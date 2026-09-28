@@ -19,6 +19,7 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 
 class PatientController extends Controller
 {
@@ -41,19 +42,20 @@ class PatientController extends Controller
     /**
      * Update the authenticated user's patient profile.
      */
-    public function updateMyProfile(Request $request): PatientResource
+    public function updateMyProfile(Request $request): PatientResource|JsonResponse
     {
         $patient = $request->user()->patient;
 
         if (! $patient) {
             // Auto-create a linked patient record if one doesn't exist yet
             $patient = Patient::create([
-                'patient_id' => 'STU-' . date('y') . '-' . str_pad((string) mt_rand(1, 999999), 6, '0', STR_PAD_LEFT),
+                'patient_id' => Patient::generatePlaceholderId(),
                 'name' => $request->user()->name,
                 'type' => 'Student',
                 'course_dept' => 'General',
                 'status' => 'Active',
             ]);
+            $patient->ensureMedicalRecord();
             $request->user()->update(['patient_id' => $patient->patient_id]);
         }
 
@@ -112,24 +114,47 @@ class PatientController extends Controller
         }
 
         // Sync composite name if first/last are provided
+        $fullName = null;
         if ($firstName && $lastName) {
             $fullName = trim($firstName . ($middleName ? " {$middleName} " : ' ') . $lastName);
             $updateData['name'] = $fullName;
-            $request->user()->update(['name' => $fullName]);
         }
 
-        // Update studentId if provided and unique
-        if ($studentId && $studentId !== $patient->patient_id) {
-            $exists = Patient::where('patient_id', $studentId)->where('id', '!=', $patient->id)->exists();
-            if (! $exists) {
-                $updateData['patient_id'] = $studentId;
-                $request->user()->update(['patient_id' => $studentId]);
+        // patient_id is the plain-string key every clinical table uses, so a
+        // student may only replace the auto-generated placeholder ID, only
+        // while nothing references it yet, and only with an ID nobody uses.
+        $oldPatientId = $patient->patient_id;
+        if ($studentId && $studentId !== $oldPatientId) {
+            $canChange = Patient::isPlaceholderId($oldPatientId)
+                && ! Patient::idHasClinicalRecords($oldPatientId)
+                && ! Patient::where('patient_id', $studentId)->exists()
+                && ! Patient::idHasClinicalRecords($studentId)
+                && ! MedicalRecord::where('patient_id', $studentId)->exists();
+
+            if (! $canChange) {
+                return response()->json([
+                    'message' => 'Your student ID can no longer be changed here. Please visit the clinic to update it.',
+                    'errors' => ['studentId' => ['The student ID cannot be changed.']],
+                ], 422);
             }
+
+            $updateData['patient_id'] = $studentId;
         }
 
-        if (! empty($updateData)) {
-            $patient->update($updateData);
-        }
+        DB::transaction(function () use ($patient, $updateData, $request, $oldPatientId, $fullName) {
+            if (! empty($updateData)) {
+                $patient->update($updateData);
+            }
+
+            if ($fullName) {
+                $request->user()->update(['name' => $fullName]);
+            }
+
+            if ($patient->patient_id !== $oldPatientId) {
+                MedicalRecord::where('patient_id', $oldPatientId)->update(['patient_id' => $patient->patient_id]);
+                $request->user()->update(['patient_id' => $patient->patient_id]);
+            }
+        });
 
         $patient->loadCount(['appointments', 'consultations', 'medicalCertificates', 'prescriptions']);
 
@@ -148,20 +173,6 @@ class PatientController extends Controller
         }
 
         return $this->medicalInformation($patient);
-    }
-
-    /**
-     * Get the authenticated user's aggregated chronological timeline.
-     */
-    public function myRecordHistory(Request $request): JsonResponse
-    {
-        $patient = $request->user()->patient;
-
-        if (! $patient) {
-            abort(404, 'No patient record associated with this user.');
-        }
-
-        return $this->recordHistory($patient);
     }
 
     /**
@@ -327,7 +338,8 @@ class PatientController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'id' => ['required', 'string', 'max:255'],
+            // Optional in the Register Patient form; a placeholder is generated when blank.
+            'id' => ['nullable', 'string', 'max:255', 'unique:patients,patient_id'],
             'name' => ['required', 'string', 'max:255'],
             'type' => ['required', 'string', 'max:255'],
             'courseDept' => ['nullable', 'string', 'max:255'],
@@ -337,19 +349,107 @@ class PatientController extends Controller
             'history' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $patient = Patient::create([
-            'patient_id' => $validated['id'],
-            'name' => $validated['name'],
-            'type' => $validated['type'],
-            'course_dept' => $validated['courseDept'] ?? '',
-            'contact' => $validated['contact'] ?? '',
-            'emergency_contact' => $validated['emergencyContact'] ?? '',
-            'allergies' => $validated['allergies'] ?? 'None',
-            'history' => $validated['history'] ?? 'None',
-            'status' => 'Active',
-        ]);
+        $patient = DB::transaction(function () use ($validated) {
+            $patient = Patient::create([
+                'patient_id' => ($validated['id'] ?? null) ?: Patient::generatePlaceholderId(),
+                'name' => $validated['name'],
+                'type' => $validated['type'],
+                'course_dept' => $validated['courseDept'] ?? '',
+                'contact' => $validated['contact'] ?? '',
+                'emergency_contact' => $validated['emergencyContact'] ?? '',
+                'allergies' => $validated['allergies'] ?? 'None',
+                'history' => $validated['history'] ?? 'None',
+                'status' => 'Active',
+            ]);
+            $patient->ensureMedicalRecord();
+
+            return $patient;
+        });
 
         return (new PatientResource($patient))->response()->setStatusCode(201);
+    }
+
+    /**
+     * Update a patient's registry details (staff).
+     *
+     * The patient ID is intentionally not editable: it is the plain-string
+     * key every clinical table references. Demographics are mirrored onto the
+     * medical record and the linked user account's display name.
+     */
+    public function update(Request $request, Patient $patient): PatientResource
+    {
+        $validated = $request->validate([
+            'name' => ['sometimes', 'string', 'max:255'],
+            'firstName' => ['nullable', 'string', 'max:100'],
+            'middleName' => ['nullable', 'string', 'max:100'],
+            'lastName' => ['nullable', 'string', 'max:100'],
+            'age' => ['nullable', 'integer', 'min:1', 'max:120'],
+            'type' => ['sometimes', 'string', 'max:255'],
+            'courseDept' => ['nullable', 'string', 'max:255'],
+            'block' => ['nullable', 'string', 'max:50'],
+            'address' => ['nullable', 'string', 'max:500'],
+            'nationality' => ['nullable', 'string', 'max:100'],
+            'contact' => ['nullable', 'string', 'max:255'],
+            'emergencyContactName' => ['nullable', 'string', 'max:150'],
+            'emergencyContactPhone' => ['nullable', 'string', 'max:50'],
+            'emergencyContact' => ['nullable', 'string', 'max:255'],
+            'allergies' => ['nullable', 'string', 'max:255'],
+            'history' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $map = [
+            'name' => 'name', 'firstName' => 'first_name', 'middleName' => 'middle_name',
+            'lastName' => 'last_name', 'age' => 'age', 'type' => 'type', 'courseDept' => 'course_dept',
+            'block' => 'block', 'address' => 'address', 'nationality' => 'nationality',
+            'contact' => 'contact', 'emergencyContactName' => 'emergency_contact_name',
+            'emergencyContactPhone' => 'emergency_contact_phone', 'emergencyContact' => 'emergency_contact',
+            'allergies' => 'allergies', 'history' => 'history',
+        ];
+
+        $data = [];
+        foreach ($map as $input => $column) {
+            if (array_key_exists($input, $validated)) {
+                $data[$column] = $validated[$input];
+            }
+        }
+
+        if (! array_key_exists('name', $data) && (isset($data['first_name']) || isset($data['last_name']))) {
+            $first = $data['first_name'] ?? $patient->first_name;
+            $middle = $data['middle_name'] ?? $patient->middle_name;
+            $last = $data['last_name'] ?? $patient->last_name;
+            if ($first && $last) {
+                $data['name'] = trim($first.($middle ? " {$middle} " : ' ').$last);
+            }
+        }
+
+        if (! array_key_exists('emergency_contact', $data)
+            && (array_key_exists('emergency_contact_name', $data) || array_key_exists('emergency_contact_phone', $data))) {
+            $eName = $data['emergency_contact_name'] ?? $patient->emergency_contact_name;
+            $ePhone = $data['emergency_contact_phone'] ?? $patient->emergency_contact_phone;
+            $data['emergency_contact'] = trim(($eName ?? '').($ePhone ? " ({$ePhone})" : ''));
+        }
+
+        DB::transaction(function () use ($patient, $data) {
+            $patient->update($data);
+
+            MedicalRecord::where('patient_id', $patient->patient_id)->update([
+                'name' => $patient->name,
+                'age' => $patient->age ?? 0,
+                'type' => $patient->type ?: 'Student',
+                'course_dept' => $patient->course_dept ?? '',
+                'contact' => $patient->contact,
+                'emergency_contact' => $patient->emergency_contact,
+                'last_updated' => now()->toDateString(),
+            ]);
+
+            if (array_key_exists('name', $data)) {
+                User::where('patient_id', $patient->patient_id)->update(['name' => $patient->name]);
+            }
+        });
+
+        $patient->loadCount(['appointments', 'consultations', 'medicalCertificates', 'prescriptions']);
+
+        return new PatientResource($patient);
     }
 
     /**

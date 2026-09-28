@@ -91,6 +91,28 @@ class CalendarController extends Controller
         ]);
     }
 
+    /**
+     * Upcoming clinic activities for the student mobile app.
+     *
+     * Hides cancelled/completed events and past ones; the creator (staff
+     * account) is not loaded, so it is omitted from the resource.
+     */
+    public function publicEvents(): AnonymousResourceCollection
+    {
+        $today = now()->toDateString();
+
+        $events = ClinicEvent::whereIn('status', ['Scheduled', 'Ongoing'])
+            ->where(function ($q) use ($today) {
+                $q->where('end_date', '>=', $today)
+                    ->orWhere(fn ($q2) => $q2->whereNull('end_date')->where('start_date', '>=', $today));
+            })
+            ->orderBy('start_date')
+            ->orderBy('start_time')
+            ->get();
+
+        return ClinicEventResource::collection($events);
+    }
+
     // ========== Clinic Event CRUD ==========
 
     /**
