@@ -31,12 +31,15 @@ class UpdateConsultationRequest extends FormRequest
     {
         return [
             'staff' => ['nullable', 'string', 'max:255'],
+            'staff_id' => ['nullable', 'integer', 'exists:users,id'],
             'chiefComplaint' => ['nullable', 'string'],
             'vitals' => ['nullable', 'array'],
             'clinicalFindings' => ['nullable', 'string'],
             'diagnosis' => ['nullable', 'string'],
             'treatment' => ['nullable', 'string'],
             'disposition' => ['nullable', 'string'],
+            'followUpRequired' => ['nullable', 'boolean'],
+            'followUpNotes' => ['nullable', 'string', 'max:1000'],
         ];
     }
 }

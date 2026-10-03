@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\ClinicEvent;
+use App\Support\ClinicSchedule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -34,6 +35,18 @@ class StoreClinicEventRequest extends FormRequest
             'type' => ['sometimes', 'string', Rule::in(ClinicEvent::TYPES)],
             'status' => ['sometimes', 'string', Rule::in(ClinicEvent::STATUSES)],
         ];
+    }
+
+    /**
+     * Store times in the shared clinic format ("08:00 AM").
+     */
+    protected function prepareForValidation(): void
+    {
+        foreach (['start_time', 'end_time'] as $field) {
+            if ($this->filled($field)) {
+                $this->merge([$field => ClinicSchedule::normalize($this->input($field))]);
+            }
+        }
     }
 
     /**
@@ -70,18 +83,6 @@ class StoreClinicEventRequest extends FormRequest
 
     private function timeToMinutes(string $time): int
     {
-        $parsed = date_parse($time);
-        if (!$parsed || $parsed['error_count'] > 0) {
-            return 0;
-        }
-        $hours = $parsed['hour'];
-        $minutes = $parsed['minute'];
-        $lower = strtolower($time);
-        if (str_contains($lower, 'pm') && $hours !== 12) {
-            $hours += 12;
-        } elseif (str_contains($lower, 'am') && $hours === 12) {
-            $hours = 0;
-        }
-        return $hours * 60 + $minutes;
+        return ClinicSchedule::toMinutes($time) ?? 0;
     }
 }

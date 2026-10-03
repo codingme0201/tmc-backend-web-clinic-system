@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\AcademicPrograms;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -23,6 +24,7 @@ class UpdateUserRequest extends FormRequest
     public function rules(): array
     {
         $userId = $this->route('user')?->id ?? $this->route('user');
+        $currentCourse = $this->route('user')?->patient?->course_dept;
 
         return [
             'name' => ['sometimes', 'string', 'max:255'],
@@ -37,9 +39,9 @@ class UpdateUserRequest extends FormRequest
             'last_name' => ['nullable', 'string', 'max:100'],
             'lastName' => ['nullable', 'string', 'max:100'],
             'age' => ['nullable', 'integer', 'min:1', 'max:120'],
-            'course' => ['nullable', 'string', 'max:150'],
-            'course_dept' => ['nullable', 'string', 'max:150'],
-            'courseDept' => ['nullable', 'string', 'max:150'],
+            'course' => ['nullable', 'string', 'max:150', AcademicPrograms::rule($currentCourse)],
+            'course_dept' => ['nullable', 'string', 'max:150', AcademicPrograms::rule($currentCourse)],
+            'courseDept' => ['nullable', 'string', 'max:150', AcademicPrograms::rule($currentCourse)],
             'block' => ['nullable', 'string', 'max:50'],
             'address' => ['nullable', 'string', 'max:500'],
             'nationality' => ['nullable', 'string', 'max:100'],

@@ -170,6 +170,7 @@ class CalendarController extends Controller
         $event = ClinicEvent::create($validated);
 
         return (new ClinicEventResource($event->load('creator')))
+            ->additional(['meta' => $this->closureImpact($event)])
             ->response()
             ->setStatusCode(201);
     }
@@ -188,7 +189,8 @@ class CalendarController extends Controller
 
         $event->update($validated);
 
-        return new ClinicEventResource($event->fresh('creator'));
+        return (new ClinicEventResource($event->fresh('creator')))
+            ->additional(['meta' => $this->closureImpact($event)]);
     }
 
     /**
@@ -224,7 +226,7 @@ class CalendarController extends Controller
 
         $startDate = $validated['start_date'];
         $endDate = $validated['end_date'] ?? $startDate;
-        $affectedCount = \App\Models\Appointment::whereBetween('date', [$startDate, $endDate])
+        $affectedCount = Appointment::whereBetween('date', [$startDate, $endDate])
             ->whereIn('status', ['Pending', 'Under Review', 'Approved'])
             ->count();
 
@@ -249,6 +251,32 @@ class CalendarController extends Controller
         $block->delete();
 
         return response()->json(['message' => 'Blocked schedule removed successfully.']);
+    }
+
+    /**
+     * For holidays, non-working days and clinic closures: how many active
+     * appointments fall inside the closed date range (they can no longer be
+     * booked, and existing ones should be rescheduled).
+     *
+     * @return array{affected_appointments_count: int, warning: ?string}
+     */
+    private function closureImpact(ClinicEvent $event): array
+    {
+        if (! $event->isNonWorking() || $event->status === 'Cancelled') {
+            return ['affected_appointments_count' => 0, 'warning' => null];
+        }
+
+        $count = Appointment::whereBetween('date', [
+            $event->start_date->format('Y-m-d'),
+            ($event->end_date ?? $event->start_date)->format('Y-m-d'),
+        ])->whereIn('status', Appointment::ACTIVE_STATUSES)->count();
+
+        return [
+            'affected_appointments_count' => $count,
+            'warning' => $count > 0
+                ? "{$count} active appointment(s) fall on these closed dates and should be rescheduled."
+                : null,
+        ];
     }
 
     /**

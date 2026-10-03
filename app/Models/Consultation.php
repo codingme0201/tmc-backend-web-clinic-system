@@ -9,8 +9,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'reference', 'date', 'time', 'patient', 'patient_id', 'appointment_id', 'staff_id', 'staff', 'status',
+    'visit_type', 'previous_consultation_id',
     'chief_complaint', 'vitals', 'clinical_findings', 'diagnosis', 'treatment',
-    'disposition', 'started_at', 'completed_at',
+    'disposition', 'follow_up_required', 'follow_up_date', 'follow_up_notes', 'follow_up_appointment_id',
+    'started_at', 'completed_at',
 ])]
 class Consultation extends Model
 {
@@ -29,7 +31,30 @@ class Consultation extends Model
         return [
             'date' => 'date:Y-m-d',
             'vitals' => 'array',
+            'follow_up_required' => 'boolean',
+            'follow_up_date' => 'date:Y-m-d',
         ];
+    }
+
+    /**
+     * The earlier consultation this follow-up visit continues from.
+     */
+    public function previousConsultation(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'previous_consultation_id');
+    }
+
+    /**
+     * The follow-up appointment scheduled from this consultation.
+     */
+    public function followUpAppointment(): BelongsTo
+    {
+        return $this->belongsTo(Appointment::class, 'follow_up_appointment_id');
+    }
+
+    public function isFollowUp(): bool
+    {
+        return $this->visit_type === Appointment::VISIT_FOLLOW_UP;
     }
 
     /**

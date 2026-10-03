@@ -6,12 +6,14 @@ use App\Http\Requests\StoreStaffScheduleRequest;
 use App\Http\Requests\UpdateStaffAvailabilityRequest;
 use App\Http\Requests\UpdateStaffScheduleRequest;
 use App\Http\Resources\StaffScheduleResource;
+use App\Models\Appointment;
 use App\Models\StaffSchedule;
 use App\Models\User;
+use App\Support\ClinicSchedule;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Collection;
 
 class StaffScheduleController extends Controller
 {
@@ -108,9 +110,11 @@ class StaffScheduleController extends Controller
             });
         }
 
-        return StaffScheduleResource::collection(
-            $query->orderBy('date')->orderBy('start_time')->get()
-        );
+        $schedules = $query->orderBy('date')->get()
+            ->sortBy(fn (StaffSchedule $s) => [$s->date?->format('Y-m-d'), ClinicSchedule::toMinutes($s->start_time)])
+            ->values();
+
+        return StaffScheduleResource::collection($this->attachBookings($schedules));
     }
 
     /**
@@ -134,8 +138,7 @@ class StaffScheduleController extends Controller
 
         // Verify the user is eligible (doctor or nurse)
         $user = User::with('role')->findOrFail($validated['user_id']);
-        $roleName = $user->role?->name ?? '';
-        if (!in_array($roleName, ['doctor', 'nurse'])) {
+        if (! $user->isClinician()) {
             return response()->json([
                 'message' => 'Only doctors and nurses can be assigned schedules.',
             ], 422);
@@ -173,7 +176,7 @@ class StaffScheduleController extends Controller
 
         $schedule = StaffSchedule::create($validated);
 
-        return (new StaffScheduleResource($schedule->load('user.role')))
+        return (new StaffScheduleResource($this->attachBookings(collect([$schedule->load('user.role')]))->first()))
             ->response()
             ->setStatusCode(201);
     }
@@ -191,8 +194,7 @@ class StaffScheduleController extends Controller
         $userId = $validated['user_id'] ?? $schedule->user_id;
         if (isset($validated['user_id']) && $validated['user_id'] !== $schedule->user_id) {
             $user = User::with('role')->findOrFail($userId);
-            $roleName = $user->role?->name ?? '';
-            if (!in_array($roleName, ['doctor', 'nurse'])) {
+            if (! $user->isClinician()) {
                 abort(422, 'Only doctors and nurses can be assigned schedules.');
             }
         }
@@ -229,7 +231,7 @@ class StaffScheduleController extends Controller
 
         $schedule->update($validated);
 
-        return new StaffScheduleResource($schedule->fresh('user.role'));
+        return new StaffScheduleResource($this->attachBookings(collect([$schedule->fresh('user.role')]))->first());
     }
 
     /**
@@ -259,11 +261,8 @@ class StaffScheduleController extends Controller
      */
     public function eligibleStaff(): AnonymousResourceCollection
     {
-        $staff = User::with('role')
-            ->whereHas('role', function ($q) {
-                $q->whereIn('name', ['doctor', 'nurse']);
-            })
-            ->where('status', 'active')
+        $staff = User::clinicians()
+            ->with(['role', 'staffProfile'])
             ->orderBy('name')
             ->get();
 
@@ -271,9 +270,10 @@ class StaffScheduleController extends Controller
     }
 
     /**
-     * Check for overlapping schedules for the same staff member on the same date.
-     *
-     * Two time blocks overlap if: startA < endB AND startB < endA
+     * Check for overlapping schedules for the same staff member on the same
+     * date. Times are compared as minutes (not strings), so "10:00 AM" is
+     * correctly after "08:00 AM". Two blocks overlap if startA < endB and
+     * startB < endA.
      */
     private function findConflict(
         int $userId,
@@ -281,22 +281,14 @@ class StaffScheduleController extends Controller
         string $startTime,
         string $endTime,
         ?int $excludeId = null,
+        ?string $status = null,
     ): ?StaffSchedule {
-        $query = StaffSchedule::where('user_id', $userId)
-            ->where('date', $date)
-            ->where(function ($q) use ($startTime, $endTime) {
-                $q->where(function ($q2) use ($startTime, $endTime) {
-                    // Existing schedule overlaps with new schedule
-                    $q2->where('start_time', '<', $endTime)
-                        ->where('end_time', '>', $startTime);
-                });
-            });
-
-        if ($excludeId) {
-            $query->where('id', '!=', $excludeId);
-        }
-
-        return $query->first();
+        return StaffSchedule::where('user_id', $userId)
+            ->whereDate('date', $date)
+            ->when($status, fn ($q) => $q->where('status', $status))
+            ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
+            ->get()
+            ->first(fn (StaffSchedule $s) => ClinicSchedule::rangesOverlap($s->start_time, $s->end_time, $startTime, $endTime));
     }
 
     /**
@@ -309,20 +301,36 @@ class StaffScheduleController extends Controller
         string $endTime,
         ?int $excludeId = null,
     ): ?StaffSchedule {
-        $query = StaffSchedule::where('user_id', $userId)
-            ->where('date', $date)
-            ->where('status', 'Unavailable')
-            ->where(function ($q) use ($startTime, $endTime) {
-                $q->where(function ($q2) use ($startTime, $endTime) {
-                    $q2->where('start_time', '<', $endTime)
-                        ->where('end_time', '>', $startTime);
-                });
-            });
+        return $this->findConflict($userId, $date, $startTime, $endTime, $excludeId, 'Unavailable');
+    }
 
-        if ($excludeId) {
-            $query->where('id', '!=', $excludeId);
+    /**
+     * Attach each schedule's assigned patients (active appointments for that
+     * doctor on that date within the shift), so appointment assignments show
+     * on the doctor/nurse schedule.
+     */
+    private function attachBookings(Collection $schedules): Collection
+    {
+        if ($schedules->isEmpty()) {
+            return $schedules;
         }
 
-        return $query->first();
+        $appointments = Appointment::whereIn('staff_id', $schedules->pluck('user_id')->unique()->values())
+            ->whereIn('date', $schedules->map(fn ($s) => $s->date?->format('Y-m-d'))->unique()->values())
+            ->whereIn('status', [...Appointment::ACTIVE_STATUSES, 'Completed'])
+            ->get();
+
+        return $schedules->each(function (StaffSchedule $schedule) use ($appointments) {
+            $start = ClinicSchedule::toMinutes($schedule->start_time);
+            $end = ClinicSchedule::toMinutes($schedule->end_time);
+            $schedule->booked_appointments = Appointment::sortFifo($appointments->filter(function ($a) use ($schedule, $start, $end) {
+                $minutes = ClinicSchedule::toMinutes($a->time);
+
+                return $a->staff_id === $schedule->user_id
+                    && $a->date?->format('Y-m-d') === $schedule->date?->format('Y-m-d')
+                    && $minutes !== null && $start !== null && $end !== null
+                    && $minutes >= $start && $minutes < $end;
+            }));
+        });
     }
 }

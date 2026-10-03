@@ -16,6 +16,7 @@ use App\Models\Notification;
 use App\Models\Patient;
 use App\Models\Prescription;
 use App\Models\User;
+use App\Support\AcademicPrograms;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -69,9 +70,9 @@ class PatientController extends Controller
             'age' => ['nullable', 'integer', 'min:1', 'max:120'],
             'studentId' => ['nullable', 'string', 'max:50'],
             'student_id' => ['nullable', 'string', 'max:50'],
-            'course' => ['nullable', 'string', 'max:150'],
-            'courseDept' => ['nullable', 'string', 'max:150'],
-            'course_dept' => ['nullable', 'string', 'max:150'],
+            'course' => ['nullable', 'string', 'max:150', AcademicPrograms::rule($patient->course_dept)],
+            'courseDept' => ['nullable', 'string', 'max:150', AcademicPrograms::rule($patient->course_dept)],
+            'course_dept' => ['nullable', 'string', 'max:150', AcademicPrograms::rule($patient->course_dept)],
             'block' => ['nullable', 'string', 'max:50'],
             'address' => ['nullable', 'string', 'max:500'],
             'nationality' => ['nullable', 'string', 'max:100'],
@@ -342,7 +343,7 @@ class PatientController extends Controller
             'id' => ['nullable', 'string', 'max:255', 'unique:patients,patient_id'],
             'name' => ['required', 'string', 'max:255'],
             'type' => ['required', 'string', 'max:255'],
-            'courseDept' => ['nullable', 'string', 'max:255'],
+            'courseDept' => ['nullable', 'string', 'max:255', AcademicPrograms::rule()],
             'contact' => ['nullable', 'string', 'max:255'],
             'emergencyContact' => ['nullable', 'string', 'max:255'],
             'allergies' => ['nullable', 'string', 'max:255'],
@@ -385,7 +386,7 @@ class PatientController extends Controller
             'lastName' => ['nullable', 'string', 'max:100'],
             'age' => ['nullable', 'integer', 'min:1', 'max:120'],
             'type' => ['sometimes', 'string', 'max:255'],
-            'courseDept' => ['nullable', 'string', 'max:255'],
+            'courseDept' => ['nullable', 'string', 'max:255', AcademicPrograms::rule($patient->course_dept)],
             'block' => ['nullable', 'string', 'max:50'],
             'address' => ['nullable', 'string', 'max:500'],
             'nationality' => ['nullable', 'string', 'max:100'],

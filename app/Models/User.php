@@ -6,9 +6,11 @@ namespace App\Models;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -26,6 +28,16 @@ class User extends Authenticatable
      * instead of the web clinic system.
      */
     public const PATIENT_ROLES = ['student', 'patient'];
+
+    /**
+     * Clinicians who can be assigned to appointments and consultations.
+     */
+    public const CLINICIAN_ROLES = ['doctor', 'nurse'];
+
+    /**
+     * Clinic personnel shown in the medical staff directory.
+     */
+    public const CLINIC_STAFF_ROLES = ['doctor', 'nurse', 'front_desk'];
 
     /**
      * Get the attributes that should be cast.
@@ -56,6 +68,30 @@ class User extends Authenticatable
     public function staffSchedules(): HasMany
     {
         return $this->hasMany(StaffSchedule::class);
+    }
+
+    public function staffProfile(): HasOne
+    {
+        return $this->hasOne(StaffProfile::class);
+    }
+
+    public function assignedAppointments(): HasMany
+    {
+        return $this->hasMany(Appointment::class, 'staff_id');
+    }
+
+    /**
+     * Active doctor/nurse accounts that can be assigned to patients.
+     */
+    public function scopeClinicians(Builder $query): Builder
+    {
+        return $query->where('status', 'active')
+            ->whereHas('role', fn ($q) => $q->whereIn('name', self::CLINICIAN_ROLES));
+    }
+
+    public function isClinician(): bool
+    {
+        return in_array($this->role?->name, self::CLINICIAN_ROLES, true);
     }
 
     public function createdEvents(): HasMany

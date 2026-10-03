@@ -28,9 +28,12 @@ class StoreAppointmentRequest extends FormRequest
             'patient' => ['required', 'string', 'max:255'],
             'patient_id' => ['nullable', 'string', 'max:50'],
             'type' => ['required', Rule::in(Appointment::TYPES)],
+            'visit_type' => ['nullable', Rule::in(Appointment::VISIT_TYPES)],
+            'previous_consultation_id' => ['nullable', 'integer', 'exists:consultations,id'],
             'reason' => ['required', 'string', 'max:1000'],
             'date' => ['required', 'date'],
             'time' => ['required', Rule::in(Appointment::TIME_SLOTS)],
+            'staff_id' => ['nullable', 'integer', 'exists:users,id'],
             'staff' => ['nullable', 'string', 'max:255'],
         ];
     }

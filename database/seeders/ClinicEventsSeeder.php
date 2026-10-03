@@ -17,6 +17,32 @@ class ClinicEventsSeeder extends Seeder
 
         $events = [
             [
+                'date' => 'Oct 30, 2026',
+                'title' => "All Saints' Day Break (Clinic Closed)",
+                'description' => 'Non-working days for the All Saints\' and All Souls\' Day holidays. No appointments are accepted.',
+                'start_date' => '2026-10-30',
+                'end_date' => '2026-11-02',
+                'start_time' => null,
+                'end_time' => null,
+                'all_day' => true,
+                'type' => 'Non-Working Day',
+                'status' => 'Scheduled',
+                'created_by' => $adminId,
+            ],
+            [
+                'date' => 'Oct 12, 2026',
+                'title' => 'Flu Vaccination Drive',
+                'description' => 'Free influenza vaccination for students at the TMC Expansion Clinic.',
+                'start_date' => '2026-10-12',
+                'end_date' => '2026-10-16',
+                'start_time' => '08:00 AM',
+                'end_time' => '04:00 PM',
+                'all_day' => false,
+                'type' => 'Vaccination Drive',
+                'status' => 'Scheduled',
+                'created_by' => $adminId,
+            ],
+            [
                 'date' => 'Sep 01, 2026',
                 'title' => 'Annual Student Physical Checkup Drive',
                 'description' => 'Mandatory medical evaluation for incoming first-year college students.',

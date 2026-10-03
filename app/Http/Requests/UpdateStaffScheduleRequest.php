@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\StaffSchedule;
+use App\Support\ClinicSchedule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -32,10 +33,30 @@ class UpdateStaffScheduleRequest extends FormRequest
         return [
             'user_id' => ['sometimes', 'integer', 'exists:users,id'],
             'date' => ['sometimes', 'date', 'date_format:Y-m-d'],
-            'start_time' => ['sometimes', 'string', 'max:10'],
-            'end_time' => ['sometimes', 'string', 'max:10'],
+            'start_time' => ['sometimes', 'string', Rule::in(ClinicSchedule::shiftTimes())],
+            'end_time' => ['sometimes', 'string', Rule::in(ClinicSchedule::shiftTimes())],
             'status' => ['sometimes', 'string', Rule::in(StaffSchedule::STATUSES)],
             'notes' => ['nullable', 'string', 'max:500'],
+        ];
+    }
+
+    /**
+     * Store times in the shared clinic format ("08:00 AM").
+     */
+    protected function prepareForValidation(): void
+    {
+        foreach (['start_time', 'end_time'] as $field) {
+            if ($this->filled($field)) {
+                $this->merge([$field => ClinicSchedule::normalize($this->input($field))]);
+            }
+        }
+    }
+
+    public function messages(): array
+    {
+        return [
+            'start_time.in' => 'Shifts must fall within clinic working hours (8:00 AM to 5:00 PM).',
+            'end_time.in' => 'Shifts must fall within clinic working hours (8:00 AM to 5:00 PM).',
         ];
     }
 
@@ -47,40 +68,12 @@ class UpdateStaffScheduleRequest extends FormRequest
     public function withValidator($validator): void
     {
         $validator->after(function ($validator) {
-            $start = $this->start_time;
-            $end = $this->end_time;
+            $start = ClinicSchedule::toMinutes($this->start_time ?? $this->route('schedule')?->start_time);
+            $end = ClinicSchedule::toMinutes($this->end_time ?? $this->route('schedule')?->end_time);
 
-            if ($start && $end) {
-                $startMinutes = $this->timeToMinutes($start);
-                $endMinutes = $this->timeToMinutes($end);
-
-                if ($endMinutes <= $startMinutes) {
-                    $validator->errors()->add('end_time', 'End time must be after start time.');
-                }
+            if ($start !== null && $end !== null && $end <= $start) {
+                $validator->errors()->add('end_time', 'End time must be after start time.');
             }
         });
-    }
-
-    /**
-     * Convert a time string (e.g. "08:00 AM") to minutes for comparison.
-     */
-    private function timeToMinutes(string $time): int
-    {
-        $parsed = date_parse($time);
-        if (!$parsed || $parsed['error_count'] > 0) {
-            return 0;
-        }
-
-        $hours = $parsed['hour'];
-        $minutes = $parsed['minute'];
-
-        $lower = strtolower($time);
-        if (str_contains($lower, 'pm') && $hours !== 12) {
-            $hours += 12;
-        } elseif (str_contains($lower, 'am') && $hours === 12) {
-            $hours = 0;
-        }
-
-        return $hours * 60 + $minutes;
     }
 }

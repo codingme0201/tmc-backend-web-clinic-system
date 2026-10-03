@@ -34,18 +34,22 @@ class StaffSchedulesSeeder extends Seeder
         $schedules = [];
 
         foreach ($staff as $member) {
-            // Each staff member gets 5 weekday schedules (Mon-Fri)
-            for ($day = 0; $day < 5; $day++) {
-                $date = $today->copy()->addDays($day);
+            // Each staff member gets weekday schedules (Mon-Fri) for both weeks
+            for ($offset = 0; $offset < 12; $offset++) {
+                $day = $offset % 7;
+                if ($day > 4) {
+                    continue;
+                }
+                $date = $today->copy()->addDays($offset);
 
                 // Doctors: 8 AM - 4 PM or 9 AM - 5 PM
-                // Nurses: 7:30 AM - 3:30 PM or 10 AM - 6 PM
+                // Nurses: 8 AM - 4 PM or 9 AM - 5 PM (clinic hours start at 8:00 AM)
                 if ($member->role->name === 'doctor') {
-                    $start = $day % 2 === 0 ? '8:00 AM' : '9:00 AM';
-                    $end = $day % 2 === 0 ? '4:00 PM' : '5:00 PM';
+                    $start = $day % 2 === 0 ? '08:00 AM' : '09:00 AM';
+                    $end = $day % 2 === 0 ? '04:00 PM' : '05:00 PM';
                 } else {
-                    $start = $day % 2 === 0 ? '7:30 AM' : '10:00 AM';
-                    $end = $day % 2 === 0 ? '3:30 PM' : '6:00 PM';
+                    $start = $day % 2 === 0 ? '08:00 AM' : '09:00 AM';
+                    $end = $day % 2 === 0 ? '04:00 PM' : '05:00 PM';
                 }
 
                 $schedules[] = [
@@ -81,10 +85,10 @@ class StaffSchedulesSeeder extends Seeder
                 [
                     'user_id' => $firstDoctor->id,
                     'date' => $nextMonday->format('Y-m-d'),
-                    'start_time' => '1:00 PM',
+                    'start_time' => '01:00 PM',
                 ],
                 [
-                    'end_time' => '5:00 PM',
+                    'end_time' => '05:00 PM',
                     'status' => 'Unavailable',
                     'notes' => 'Personal appointment',
                     'created_at' => now(),

@@ -6,6 +6,7 @@ use App\Http\Requests\LoginRequest;
 use App\Models\Patient;
 use App\Models\Role;
 use App\Models\User;
+use App\Support\AcademicPrograms;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -53,7 +54,7 @@ class AuthController extends Controller
 
         if ($client === 'web' && $isStudentUser) {
             return response()->json([
-                'message' => 'Student accounts can only access TMC CareLink via the mobile application. Only doctors, nurses, and administrators can enter the web clinic system.',
+                'message' => 'Student accounts can only access TMC CareLink via the mobile application. Only doctors, nurses, front desk staff, and administrators can enter the web clinic system.',
                 'code' => $user->role?->name === 'student' ? 'STUDENT_MOBILE_ONLY' : 'PATIENT_MOBILE_ONLY',
                 'role' => $user->role?->name,
             ], 403);
@@ -61,7 +62,7 @@ class AuthController extends Controller
 
         if ($client === 'mobile' && ! $isStudentUser) {
             return response()->json([
-                'message' => 'This mobile app is for student users only. Doctors, nurses, and administrators must log in through the web clinic portal.',
+                'message' => 'This mobile app is for student users only. Doctors, nurses, front desk staff, and administrators must log in through the web clinic portal.',
                 'code' => 'CLINIC_STAFF_WEB_ONLY',
                 'role' => $user->role?->name,
             ], 403);
@@ -141,9 +142,9 @@ class AuthController extends Controller
             'studentId' => ['nullable', 'string', 'max:50'],
             'type' => ['nullable', 'string', 'max:50'],
             'age' => ['nullable', 'integer', 'min:1', 'max:120'],
-            'course' => ['nullable', 'string', 'max:150'],
-            'course_dept' => ['nullable', 'string', 'max:150'],
-            'courseDept' => ['nullable', 'string', 'max:150'],
+            'course' => ['nullable', 'string', 'max:150', AcademicPrograms::rule()],
+            'course_dept' => ['nullable', 'string', 'max:150', AcademicPrograms::rule()],
+            'courseDept' => ['nullable', 'string', 'max:150', AcademicPrograms::rule()],
             'block' => ['nullable', 'string', 'max:50'],
             'address' => ['nullable', 'string', 'max:500'],
             'nationality' => ['nullable', 'string', 'max:100'],

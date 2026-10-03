@@ -94,6 +94,34 @@ class UsersTest extends TestCase
         ]);
     }
 
+    public function test_admin_can_create_student_with_new_student_id(): void
+    {
+        $admin = $this->adminUser();
+        $studentRole = Role::firstOrCreate(['name' => 'student'], ['description' => 'Student']);
+
+        $response = $this->actingAs($admin, 'sanctum')->postJson('/api/users', [
+            'email' => 'jcruz@tmc.edu.ph',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+            'role_id' => $studentRole->id,
+            'patient_id' => null,
+            'student_id' => '24-777777',
+            'first_name' => 'Juan',
+            'last_name' => 'Cruz',
+            'age' => 20,
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.name', 'Juan Cruz')
+            ->assertJsonPath('data.patientId', '24-777777');
+
+        $this->assertDatabaseHas('patients', [
+            'patient_id' => '24-777777',
+            'first_name' => 'Juan',
+            'last_name' => 'Cruz',
+        ]);
+    }
+
     public function test_user_creation_fails_with_invalid_patient_id(): void
     {
         $admin = $this->adminUser();

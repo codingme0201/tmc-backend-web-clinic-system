@@ -26,7 +26,7 @@ class SystemSetting extends Model
     public static function getInstance(): static
     {
         return static::firstOrCreate([], [
-            'clinic_name' => 'Trinidad Municipal College Clinic',
+            'clinic_name' => 'TMC Expansion Clinic',
             'clinic_address' => 'Tagum Norte, Trinidad, Bohol, Philippines',
             'clinic_hours' => '8:00 AM - 5:00 PM',
             'clinic_days' => 'Monday - Friday',

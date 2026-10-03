@@ -1,10 +1,12 @@
 <?php
 
+use App\Http\Controllers\AcademicProgramController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\ClinicInsightsController;
+use App\Http\Controllers\ClinicStaffController;
 use App\Http\Controllers\ConsultationController;
 use App\Http\Controllers\MedicalCertificateController;
 use App\Http\Controllers\MedicalRecordController;
@@ -12,6 +14,7 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PatientController;
 use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\PrescriptionController;
+use App\Http\Controllers\QueueController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RoleController;
@@ -57,6 +60,9 @@ Route::get('/health', function () {
     ]);
 });
 
+// Course / department options (public: the mobile registration form needs them).
+Route::get('/academic-programs', [AcademicProgramController::class, 'index']);
+
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
 Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:login');
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:login');
@@ -81,6 +87,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/roles/{role}/permissions', [RoleController::class, 'updatePermissions'])->middleware('permission:roles.assign_permissions');
 
     // Appointments (Module 3)
+    Route::get('/appointments/follow-up-options', [AppointmentController::class, 'followUpOptions'])->middleware('permission:appointments.create');
     Route::middleware('permission:appointments.view')->group(function () {
         Route::get('/appointments', [AppointmentController::class, 'index']);
         Route::get('/appointments/{appointment}', [AppointmentController::class, 'show']);
@@ -91,6 +98,22 @@ Route::middleware('auth:sanctum')->group(function () {
     // so the check happens inside the controller rather than a static middleware.
     Route::patch('/appointments/{appointment}/status', [AppointmentController::class, 'updateStatus']);
     Route::post('/appointments/{appointment}/reschedule', [AppointmentController::class, 'reschedule'])->middleware('permission:appointments.reschedule');
+    Route::patch('/appointments/{appointment}/assign', [AppointmentController::class, 'assign'])->middleware('permission:appointments.update');
+
+    // Daily patient queue (FIFO)
+    Route::get('/queue', [QueueController::class, 'index'])->middleware('permission:appointments.view');
+    Route::post('/queue/{appointment}/check-in', [QueueController::class, 'checkIn'])->middleware('permission:appointments.update');
+    Route::delete('/queue/{appointment}/check-in', [QueueController::class, 'undoCheckIn'])->middleware('permission:appointments.update');
+    Route::post('/queue/{appointment}/serve', [QueueController::class, 'serve'])->middleware('permission:consultations.create');
+
+    // Medical staff directory & credentials
+    Route::get('/clinic-staff', [ClinicStaffController::class, 'index'])->middleware('permission:schedules.view');
+    Route::get('/clinic-staff/{user}', [ClinicStaffController::class, 'show'])->middleware('permission:schedules.view');
+    Route::put('/clinic-staff/{user}/profile', [ClinicStaffController::class, 'update'])->middleware('permission:users.update');
+    Route::post('/clinic-staff/{user}/verify', [ClinicStaffController::class, 'verify'])->middleware('permission:users.update');
+    // Each doctor/nurse/front desk member maintains their own credentials.
+    Route::get('/me/staff-profile', [ClinicStaffController::class, 'me'])->middleware('staff.user');
+    Route::put('/me/staff-profile', [ClinicStaffController::class, 'updateMine'])->middleware('staff.user');
 
     // Staff roster (dashboard duty schedule)
     Route::get('/staff', [StaffController::class, 'index'])->middleware('permission:schedules.view');
@@ -124,6 +147,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/consultations/{consultation}/start', [ConsultationController::class, 'start'])->middleware('permission:consultations.create');
     Route::patch('/consultations/{consultation}', [ConsultationController::class, 'update'])->middleware('permission:consultations.update');
     Route::post('/consultations/{consultation}/complete', [ConsultationController::class, 'complete'])->middleware('permission:consultations.update');
+    Route::post('/consultations/{consultation}/follow-up', [ConsultationController::class, 'scheduleFollowUp'])->middleware('permission:consultations.update');
 
     // Medical records (+ nested conditions/allergies/medications/history)
     Route::get('/medical-records', [MedicalRecordController::class, 'index'])->middleware('permission:medical_records.view');

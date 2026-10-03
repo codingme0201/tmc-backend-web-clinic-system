@@ -206,7 +206,7 @@ class AuthTest extends TestCase
             'password' => 'secret123',
             'student_id' => '24-998877',
             'type' => 'Student',
-            'course_dept' => 'BS Nursing',
+            'course_dept' => 'Bachelor of Science in Information Technology',
         ]);
 
         $response->assertCreated()

@@ -32,6 +32,11 @@ class UserResource extends JsonResource
                 'name' => $this->role->name,
                 'description' => $this->role->description,
             ]),
+            'staffProfile' => $this->whenLoaded('staffProfile', fn () => [
+                'specialization' => $this->staffProfile?->specialization ?? '',
+                'licenseType' => $this->staffProfile?->license_type ?? '',
+                'credentialStatus' => $this->staffProfile?->credential_status ?? 'Not Submitted',
+            ]),
             'patient' => $this->whenLoaded('patient', fn () => [
                 'id' => $this->patient?->id,
                 'patientId' => $this->patient?->patient_id,

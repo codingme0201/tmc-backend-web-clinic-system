@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
+use App\Support\RolePermissions;
 use Illuminate\Database\Seeder;
 
 class RolesAndPermissionsSeeder extends Seeder
@@ -131,50 +132,18 @@ class RolesAndPermissionsSeeder extends Seeder
         );
         $admin->permissions()->sync(Permission::whereIn('name', $allNames)->pluck('id'));
 
-        // Doctor: clinical care + records.
-        $doctor = Role::firstOrCreate(
-            ['name' => 'doctor'],
-            ['description' => 'Doctor — clinical care and records', 'is_system' => true],
-        );
-        $doctor->update(['is_system' => true]);
-        $doctor->permissions()->sync(Permission::whereIn('name', [
-            'dashboard.view',
-            'appointments.view',
-            'consultations.view', 'consultations.create', 'consultations.update',
-            'medical_records.view', 'medical_records.create', 'medical_records.update',
-            'medical_certificates.view', 'medical_certificates.create', 'medical_certificates.update',
-            'medical_certificates.approve',
-            'prescriptions.view', 'prescriptions.create',
-            'patients.view', 'patients.create',
-            'schedules.view',
-            'calendar.view', 'calendar.create', 'calendar.update', 'calendar.delete', 'calendar.block',
-            'reports.view',
-            'reports.export',
-            'audit_logs.view',
-            'notifications.view', 'notifications.send',
-        ])->pluck('id'));
-
-        // Nurse: clinic care support.
-        $nurse = Role::firstOrCreate(
-            ['name' => 'nurse'],
-            ['description' => 'Nurse — clinic care support', 'is_system' => true],
-        );
-        $nurse->update(['is_system' => true]);
-        $nurse->permissions()->sync(Permission::whereIn('name', [
-            'dashboard.view',
-            'appointments.view', 'appointments.create',
-            'consultations.view', 'consultations.create', 'consultations.update',
-            'medical_records.view', 'medical_records.create', 'medical_records.update',
-            'medical_certificates.view', 'medical_certificates.create',
-            'prescriptions.view', 'prescriptions.create',
-            'patients.view', 'patients.create',
-            'schedules.view',
-            'calendar.view', 'calendar.create', 'calendar.update', 'calendar.delete', 'calendar.block',
-            'reports.view',
-            'reports.export',
-            'audit_logs.view',
-            'notifications.view',
-        ])->pluck('id'));
+        // Doctor, Nurse (clinical assistant) and Front Desk — see RolePermissions.
+        $roles = [];
+        foreach (array_keys(RolePermissions::ROLES) as $roleName) {
+            $role = Role::firstOrCreate(
+                ['name' => $roleName],
+                ['description' => RolePermissions::description($roleName), 'is_system' => true],
+            );
+            $role->update(['is_system' => true, 'description' => RolePermissions::description($roleName)]);
+            $role->permissions()->sync(Permission::whereIn('name', RolePermissions::for($roleName))->pluck('id'));
+            $roles[$roleName] = $role;
+        }
+        $nurse = $roles['nurse'];
 
         // Student: mobile app self-service only.
         $studentRole = Role::firstOrCreate(

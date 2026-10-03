@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests;
 
+use App\Support\ClinicSchedule;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class CompleteConsultationRequest extends FormRequest
 {
@@ -24,6 +26,10 @@ class CompleteConsultationRequest extends FormRequest
      */
     protected function prepareForValidation(): void
     {
+        if ($this->filled('followUpTime')) {
+            $this->merge(['followUpTime' => ClinicSchedule::normalize($this->input('followUpTime'))]);
+        }
+
         foreach (['chiefComplaint', 'diagnosis', 'treatment'] as $field) {
             if (array_key_exists($field, $this->all()) && trim((string) $this->input($field)) === '') {
                 $this->merge([$field => null]);
@@ -46,12 +52,17 @@ class CompleteConsultationRequest extends FormRequest
     {
         return [
             'staff' => ['nullable', 'string', 'max:255'],
+            'staff_id' => ['nullable', 'integer', 'exists:users,id'],
             'chiefComplaint' => ['required', 'string'],
             'vitals' => ['nullable', 'array'],
             'clinicalFindings' => ['nullable', 'string'],
             'diagnosis' => ['required', 'string'],
             'treatment' => ['required', 'string'],
             'disposition' => ['nullable', 'string'],
+            'followUpRequired' => ['nullable', 'boolean'],
+            'followUpDate' => ['nullable', 'date_format:Y-m-d', 'after:today', 'required_with:followUpTime'],
+            'followUpTime' => ['nullable', 'string', Rule::in(ClinicSchedule::TIME_SLOTS), 'required_with:followUpDate'],
+            'followUpNotes' => ['nullable', 'string', 'max:1000'],
         ];
     }
 }

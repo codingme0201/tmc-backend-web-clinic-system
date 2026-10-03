@@ -15,7 +15,7 @@ class ConsultationsSeeder extends Seeder
         $consultations = [
             [
                 'reference' => 'CONS-2026-010', 'date' => '2026-08-03', 'time' => '09:00 AM',
-                'patient' => 'Mark Dela Cruz', 'patient_id' => '2022-0941', 'staff' => 'Dr. R. Mendoza',
+                'patient' => 'Mark Dela Cruz', 'patient_id' => '22-010941', 'staff' => 'Dr. R. Mendoza',
                 'status' => 'Scheduled', 'chief_complaint' => 'GERD follow-up and prescription refill',
                 'vitals' => ['temperature' => '', 'bloodPressure' => '', 'pulseRate' => '', 'respiratoryRate' => '', 'height' => '', 'weight' => ''],
                 'clinical_findings' => '', 'diagnosis' => '', 'treatment' => '', 'disposition' => '',
@@ -91,7 +91,7 @@ class ConsultationsSeeder extends Seeder
                 'started_at' => '2026-07-29 11:35 AM', 'completed_at' => '2026-07-29 12:05 PM',
             ],
             [
-                'reference' => 'CONS-2026-005', 'date' => '2026-07-28', 'time' => '09:15 AM',
+                'reference' => 'CONS-2026-005', 'date' => '2026-07-28', 'time' => '09:30 AM',
                 'patient' => 'Patricia Mae Garcia', 'patient_id' => '24-010012', 'staff' => 'Dr. S. Lopez',
                 'status' => 'Completed', 'chief_complaint' => 'Persistent toothache on upper right molar',
                 'vitals' => ['temperature' => '36.9°C', 'bloodPressure' => '115/75', 'pulseRate' => '78 bpm', 'respiratoryRate' => '16 /min', 'height' => '165 cm', 'weight' => '55 kg'],
@@ -103,12 +103,31 @@ class ConsultationsSeeder extends Seeder
             ],
         ];
 
+        $upcomingWeekday = ['CONS-2026-010' => 3, 'CONS-2026-011' => 2, 'CONS-2026-012' => 5];
+
         foreach ($consultations as $consultation) {
+            if (isset($upcomingWeekday[$consultation['reference']])) {
+                $consultation['date'] = $this->upcomingWeekday($upcomingWeekday[$consultation['reference']]);
+            }
+
             $staffId = $staffUsers[$consultation['staff']] ?? null;
             Consultation::firstOrCreate(['reference' => $consultation['reference']], [
                 ...$consultation,
                 'staff_id' => $staffId,
             ]);
         }
+    }
+
+    private function upcomingWeekday(int $count): string
+    {
+        $date = now()->startOfDay();
+        while ($count > 0) {
+            $date->addDay();
+            if (! $date->isWeekend()) {
+                $count--;
+            }
+        }
+
+        return $date->toDateString();
     }
 }

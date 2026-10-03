@@ -2,8 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\Role;
-use App\Models\User;
 use Illuminate\Database\Seeder;
 
 class DemoDataSeeder extends Seeder
@@ -17,15 +15,6 @@ class DemoDataSeeder extends Seeder
         $this->call(RolesAndPermissionsSeeder::class);
         $this->call(SystemSettingSeeder::class);
         $this->call(AdminSeeder::class);
-
-        $doctorRoleId = Role::where('name', 'doctor')->value('id');
-
-        User::firstOrCreate(['email' => 'test@example.com'], [
-            'name' => 'Test User',
-            'password' => 'password',
-            'role_id' => $doctorRoleId,
-            'status' => 'active',
-        ]);
 
         $this->call(PatientsSeeder::class);
         $this->call(UserSeeder::class);
