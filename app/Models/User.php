@@ -105,16 +105,6 @@ class User extends Authenticatable
         return in_array($this->role?->name, self::CLINICIAN_ROLES, true);
     }
 
-    public function createdEvents(): HasMany
-    {
-        return $this->hasMany(ClinicEvent::class, 'created_by');
-    }
-
-    public function unavailableSchedules(): HasMany
-    {
-        return $this->hasMany(UnavailableSchedule::class, 'created_by');
-    }
-
     public function isAdmin(): bool
     {
         return $this->role?->name === self::ADMIN_ROLE;

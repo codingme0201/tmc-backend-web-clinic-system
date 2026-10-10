@@ -6,9 +6,12 @@ use App\Http\Requests\StoreRoleRequest;
 use App\Http\Requests\UpdateRolePermissionsRequest;
 use App\Http\Requests\UpdateRoleRequest;
 use App\Http\Resources\RoleResource;
+use App\Models\ActivityLog;
 use App\Models\Permission;
 use App\Models\Role;
+use App\Support\SyncState;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
 
@@ -50,6 +53,8 @@ class RoleController extends Controller
             return $role;
         });
 
+        ActivityLog::record($request->user(), "Created role {$role->name}", 'Roles & Permissions');
+
         return (new RoleResource($role->load('permissions')->loadCount('users')->loadCount('permissions')))
             ->response()
             ->setStatusCode(201);
@@ -86,6 +91,7 @@ class RoleController extends Controller
 
             return $role;
         });
+        ActivityLog::record($request->user(), "Updated role {$role->name}".($request->has('permissions') ? ' and its permissions' : ''), 'Roles & Permissions');
 
         return new RoleResource(
             $role->load('permissions')->loadCount('users')->loadCount('permissions'),
@@ -98,7 +104,7 @@ class RoleController extends Controller
      * System roles that keep the authorization structure intact cannot be
      * deleted, nor can roles that still have users assigned.
      */
-    public function destroy(Role $role): JsonResponse
+    public function destroy(Request $request, Role $role): JsonResponse
     {
         if ($role->is_system) {
             return response()->json(['message' => 'System roles cannot be deleted.'], 409);
@@ -112,6 +118,7 @@ class RoleController extends Controller
             $role->permissions()->detach();
             $role->delete();
         });
+        ActivityLog::record($request->user(), "Deleted role {$role->name}", 'Roles & Permissions');
 
         return response()->json(null, 204);
     }
@@ -126,6 +133,8 @@ class RoleController extends Controller
         }
 
         $role->permissions()->sync($this->withoutAdminOnly($request->validated('permissions')));
+        SyncState::bump('roles');
+        ActivityLog::record($request->user(), "Updated permissions of role {$role->name}", 'Roles & Permissions');
 
         return new RoleResource(
             $role->load('permissions')->loadCount('users')->loadCount('permissions'),

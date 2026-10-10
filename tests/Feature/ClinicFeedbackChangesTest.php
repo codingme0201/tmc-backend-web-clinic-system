@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ActivityLog;
 use App\Models\Consultation;
 use App\Models\MedicalRecord;
 use App\Models\Notification;
@@ -238,5 +239,58 @@ class ClinicFeedbackChangesTest extends TestCase
         $this->putJson("/api/roles/{$doctorRole->id}/permissions", ['permissions' => [$reports->id, $audit->id]])->assertOk();
         $this->assertTrue($doctorRole->permissions()->where('name', 'reports.view')->exists());
         $this->assertFalse($doctorRole->permissions()->where('name', 'audit_logs.view')->exists());
+    }
+
+    // --- Audit logs ---------------------------------------------------------------------------
+
+    public function test_account_and_role_changes_are_recorded_in_the_audit_log(): void
+    {
+        $admin = $this->userWithRole('admin', ['users.update', 'users.delete', 'roles.update', 'roles.assign_permissions', 'audit_logs.view']);
+        $doctor = $this->userWithRole('doctor');
+        $doctorRole = $doctor->role;
+        $this->actingAs($admin, 'sanctum');
+
+        $this->patchJson("/api/users/{$doctor->id}/status", ['status' => 'inactive'])->assertOk();
+        $this->postJson("/api/users/{$doctor->id}/reset-password", ['password' => 'newpassword123', 'password_confirmation' => 'newpassword123'])->assertOk();
+        $reports = Permission::firstOrCreate(['name' => 'reports.view'], ['module' => 'Reports', 'label' => 'View Reports']);
+        $this->putJson("/api/roles/{$doctorRole->id}/permissions", ['permissions' => [$reports->id]])->assertOk();
+
+        $actions = ActivityLog::where('user_id', $admin->id)->pluck('action')->all();
+        $this->assertContains("Deactivated account of {$doctor->name} (doctor)", $actions);
+        $this->assertContains("Reset the password of {$doctor->name} ({$doctor->email})", $actions);
+        $this->assertContains('Updated permissions of role doctor', $actions);
+
+        $logs = $this->getJson('/api/activity-logs?limit=2')->assertOk()->json('data');
+        $this->assertCount(2, $logs);
+        $this->assertSame('Updated permissions of role doctor', $logs[0]['action']);
+
+        $this->actingAs($this->userWithRole('nurse', ['audit_logs.view']), 'sanctum');
+        $this->getJson('/api/activity-logs')->assertForbidden();
+    }
+
+    // --- Live sync ----------------------------------------------------------------------------
+
+    public function test_sync_versions_change_when_staff_act_so_clients_refresh(): void
+    {
+        $this->getJson('/api/sync')->assertUnauthorized();
+
+        $student = $this->student();
+        $admin = $this->userWithRole('admin', ['notifications.send']);
+
+        $this->actingAs($student, 'sanctum');
+        $before = $this->getJson('/api/sync')->assertOk()->json('data');
+        $this->assertArrayHasKey('notifications', $before);
+        $this->assertArrayHasKey('appointments', $before);
+
+        $this->actingAs($admin, 'sanctum');
+        $this->postJson('/api/notifications', ['user_id' => $student->id, 'title' => 'Hi', 'message' => 'Live'])->assertCreated();
+
+        $this->actingAs($student, 'sanctum');
+        $after = $this->getJson('/api/sync')->assertOk()->json('data');
+        $this->assertNotSame($before['notifications'], $after['notifications']);
+        $this->assertSame($before['prescriptions'], $after['prescriptions']);
+
+        $this->patchJson('/api/me/notifications/read-all')->assertOk();
+        $this->assertNotSame($after['notifications'], $this->getJson('/api/sync')->json('data.notifications'));
     }
 }

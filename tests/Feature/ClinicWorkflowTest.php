@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\Appointment;
-use App\Models\ClinicEvent;
 use App\Models\Consultation;
 use App\Models\Patient;
 use App\Models\Permission;
@@ -445,11 +444,8 @@ class ClinicWorkflowTest extends TestCase
         $this->actingAs($this->admin(), 'sanctum');
         $start = now()->addDays(10)->startOfDay();
 
-        // Leftover calendar rows no longer close the clinic.
-        ClinicEvent::create([
-            'title' => 'Semestral Break', 'type' => 'Non-Working Day', 'status' => 'Scheduled', 'all_day' => true,
-            'start_date' => $start->toDateString(), 'end_date' => $start->copy()->addDays(3)->toDateString(), 'date' => '',
-        ]);
+        $this->assertFalse(\Illuminate\Support\Facades\Schema::hasTable('clinic_events'));
+        $this->assertFalse(\Illuminate\Support\Facades\Schema::hasTable('unavailable_schedules'));
 
         $this->getJson('/api/calendar')->assertNotFound();
         $this->getJson('/api/calendar/events')->assertNotFound();

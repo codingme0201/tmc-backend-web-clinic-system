@@ -107,7 +107,7 @@ class NotificationSeeder extends Seeder
                 'message' => "Reminder: The clinic will be closed from Oct 30 to Nov 2 for the All Saints' Day break.",
                 'type' => 'system',
                 'category' => 'schedule',
-                'source' => 'Calendar',
+                'source' => 'Clinic',
                 'is_read' => true,
             ],
             [
@@ -182,7 +182,7 @@ class NotificationSeeder extends Seeder
                 'message' => 'The Flu Vaccination Drive runs from Oct 12 to Oct 16 at the TMC Expansion Clinic.',
                 'type' => 'system',
                 'category' => 'system',
-                'source' => 'Clinic Calendar',
+                'source' => 'Clinic',
                 'is_read' => true,
             ];
         }

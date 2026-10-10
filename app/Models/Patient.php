@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\SyncState;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -44,6 +45,7 @@ class Patient extends Model
                     'contact' => $patient->contact,
                     'emergency_contact' => $patient->emergency_contact,
                 ]);
+            SyncState::bump('medical_records');
         });
     }
 

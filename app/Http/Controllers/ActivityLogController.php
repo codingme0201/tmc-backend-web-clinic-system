@@ -13,8 +13,8 @@ class ActivityLogController extends Controller
     /**
      * List the activity/audit log with optional filters.
      *
-     * When called without query params (Dashboard), returns the 50 newest.
-     * When called with filter params (Audit Logs page), returns paginated results.
+     * Returns the newest entries first, limited by `?limit=` (default 50,
+     * maximum 2000); the Audit Logs page paginates them client-side.
      */
     public function index(Request $request): AnonymousResourceCollection
     {
@@ -52,14 +52,12 @@ class ActivityLogController extends Controller
             $query->whereIn('module', ['Medical Records', 'Consultations', 'Prescriptions', 'Medical Certificates']);
         }
 
-        // If no filters, apply the default limit for the Dashboard widget
-        $hasFilters = $request->hasAny(['search', 'module', 'user', 'from', 'to', 'clinical']);
-        if (!$hasFilters) {
-            $query->limit(50);
-        }
+        // Newest first, capped so the trail never loads unbounded
+        // (Dashboard widget: 50 by default; Audit Logs page asks for more).
+        $limit = min(max((int) $request->query('limit', 50), 1), 2000);
 
         return ActivityLogResource::collection(
-            $query->orderByDesc('id')->get()
+            $query->orderByDesc('id')->limit($limit)->get()
         );
     }
 

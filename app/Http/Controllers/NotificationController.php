@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreNotificationRequest;
 use App\Http\Resources\NotificationResource;
 use App\Models\Notification;
+use App\Support\SyncState;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -124,6 +125,7 @@ class NotificationController extends Controller
             'category' => $validated['category'] ?? null,
             'source' => $validated['source'] ?? $request->user()->name,
             'metadata' => $validated['metadata'] ?? null,
+            'is_read' => false,
         ]);
 
         return (new NotificationResource($notification->load(['user.role', 'sender'])))->response()->setStatusCode(201);
@@ -151,6 +153,7 @@ class NotificationController extends Controller
         Notification::where('user_id', $request->user()->id)
             ->where('is_read', false)
             ->update(['is_read' => true]);
+        SyncState::bump('notifications');
 
         return response()->json(['message' => 'All notifications marked as read.']);
     }

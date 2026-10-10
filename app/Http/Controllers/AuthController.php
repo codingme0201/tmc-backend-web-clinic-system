@@ -226,7 +226,7 @@ class AuthController extends Controller
         ]);
 
         $token = $user->createToken('tmc-carelink')->plainTextToken;
-        ActivityLog::record($user, $isStudentUser ? 'Signed in to the mobile app' : 'Signed in to the web clinic system', 'System');
+        ActivityLog::record($user, 'Registered an account from the mobile app', 'System');
 
         return response()->json([
             'token' => $token,

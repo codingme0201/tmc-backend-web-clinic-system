@@ -8,6 +8,7 @@ use App\Http\Requests\UpdateUserRoleRequest;
 use App\Http\Requests\UpdateUserRequest;
 use App\Http\Requests\UpdateUserStatusRequest;
 use App\Http\Resources\UserResource;
+use App\Models\ActivityLog;
 use App\Models\Patient;
 use App\Models\Role;
 use App\Models\User;
@@ -130,6 +131,7 @@ class UserController extends Controller
         }
 
         $user->load(['role', 'patient']);
+        ActivityLog::record($request->user(), "Created {$this->roleLabel($user)} account for {$user->name} ({$user->email})", 'Users');
 
         return (new UserResource($user))->response()->setStatusCode(201);
     }
@@ -203,6 +205,8 @@ class UserController extends Controller
             }
         }
 
+        ActivityLog::record($request->user(), "Updated account details for {$user->name} ({$user->email})", 'Users');
+
         return new UserResource($user->fresh(['role', 'patient']));
     }
 
@@ -251,6 +255,7 @@ class UserController extends Controller
         if ($user->status !== 'active') {
             $user->tokens()->delete();
         }
+        ActivityLog::record($request->user(), ($user->status === 'active' ? 'Activated' : 'Deactivated')." account of {$user->name} ({$this->roleLabel($user)})", 'Users');
 
         return new UserResource($user->fresh('role'));
     }
@@ -267,9 +272,12 @@ class UserController extends Controller
             return $this->singleAdminResponse();
         }
 
+        $previous = $this->roleLabel($user);
         $user->update(['role_id' => $request->validated('role_id')]);
+        $user = $user->fresh('role');
+        ActivityLog::record($request->user(), "Changed role of {$user->name} from {$previous} to {$this->roleLabel($user)}", 'Users');
 
-        return new UserResource($user->fresh('role'));
+        return new UserResource($user);
     }
 
     /**
@@ -284,6 +292,7 @@ class UserController extends Controller
             'password' => $request->validated('password'),
         ]);
         $user->tokens()->delete();
+        ActivityLog::record($request->user(), "Reset the password of {$user->name} ({$user->email})", 'Users');
 
         return response()->json(['message' => 'Password has been reset successfully.']);
     }
@@ -306,8 +315,14 @@ class UserController extends Controller
 
         $user->tokens()->delete();
         $user->delete();
+        ActivityLog::record($request->user(), "Deleted account of {$user->name} ({$user->email})", 'Users');
 
         return response()->json(['message' => 'User deleted successfully.']);
+    }
+
+    private function roleLabel(User $user): string
+    {
+        return str_replace('_', ' ', $user->loadMissing('role')->role?->name ?? 'user');
     }
 
     private function isAdminRoleId(int|string|null $roleId): bool

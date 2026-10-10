@@ -5,8 +5,7 @@ namespace App\Support;
 /**
  * Single source of truth for clinic time settings.
  *
- * Appointments, consultations, the queue, staff schedules and calendar
- * entries all use the same "hh:mm AM/PM" format and the same 30-minute
+ * Appointments, consultations, the queue and staff schedules all use the same "hh:mm AM/PM" format and the same 30-minute
  * slot grid, so an 08:00 AM appointment is exactly the 08:00 AM
  * consultation. Working hours start at 8:00 AM.
  */
@@ -32,7 +31,7 @@ class ClinicSchedule
     ];
 
     /**
-     * Start/end options for staff shifts and calendar entries.
+     * Start/end options for staff shifts.
      */
     public static function shiftTimes(): array
     {

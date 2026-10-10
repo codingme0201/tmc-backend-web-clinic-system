@@ -14,6 +14,7 @@ use App\Models\SystemSetting;
 use App\Models\User;
 use App\Services\AppointmentScheduler;
 use Illuminate\Http\JsonResponse;
+use App\Support\SyncState;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
@@ -477,6 +478,7 @@ class AppointmentController extends Controller
                 ->where('status', '!=', 'Completed')
                 ->update(['staff_id' => $staffUser?->id, 'staff' => $staffUser?->name ?? '']);
         });
+        SyncState::bump('consultations');
 
         if ($staffUser) {
             Notification::create([

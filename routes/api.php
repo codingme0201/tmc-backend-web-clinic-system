@@ -19,6 +19,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\StaffController;
 use App\Http\Controllers\StaffScheduleController;
+use App\Http\Controllers\SyncController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
@@ -69,6 +70,9 @@ Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middle
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', [AuthController::class, 'user']);
+    // Live sync — opaque per-module change versions polled by the web system
+    // and the mobile app (no data, so any signed-in user may read it).
+    Route::get('/sync', [SyncController::class, 'index']);
     Route::post('/logout', [AuthController::class, 'logout']);
     // Available to every signed-in user (staff and students).
     Route::post('/me/change-password', [AuthController::class, 'changePassword']);

@@ -25,8 +25,6 @@ class DemoDataSeeder extends Seeder
         $this->call(MedicalCertificatesSeeder::class);
         $this->call(PrescriptionsSeeder::class);
         $this->call(StaffSchedulesSeeder::class);
-        $this->call(ClinicEventsSeeder::class);
-        $this->call(UnavailableSchedulesSeeder::class);
         $this->call(ActivityLogsSeeder::class);
         $this->call(ClinicInsightsSeeder::class);
         $this->call(NotificationSeeder::class);
