@@ -40,6 +40,12 @@ class StorePrescriptionRequest extends FormRequest
             'consultation_id' => ['nullable', 'integer', 'exists:consultations,id'],
             'medical_record_id' => ['nullable', 'integer', 'exists:medical_records,id'],
             'prescribed_by' => ['nullable', 'string', 'max:255'],
+            'prescribed_by_id' => ['nullable', 'integer', function (string $attribute, mixed $value, \Closure $fail) {
+                $prescriber = \App\Models\User::with('role')->find($value);
+                if (! $prescriber || $prescriber->role?->name !== 'doctor' || $prescriber->status !== 'active') {
+                    $fail('Select an active doctor as the prescriber.');
+                }
+            }],
             'date' => ['nullable', 'date'],
             'medications' => ['required', 'array', 'min:1'],
             'medications.*.medicine_name' => ['required', 'string', 'max:255'],

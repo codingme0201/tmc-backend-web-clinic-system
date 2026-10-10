@@ -1,8 +1,10 @@
 <?php
 
 use App\Http\Middleware\CheckPermission;
+use App\Http\Middleware\EnsureAdminUser;
 use App\Http\Middleware\EnsurePatientUser;
 use App\Http\Middleware\EnsureStaffUser;
+use App\Http\Middleware\RecordStudentActivity;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -28,6 +30,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => CheckPermission::class,
             'patient.user' => EnsurePatientUser::class,
             'staff.user' => EnsureStaffUser::class,
+            'admin' => EnsureAdminUser::class,
+            'student.activity' => RecordStudentActivity::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

@@ -22,9 +22,11 @@ class ActivityLogsTest extends TestCase
         })->all();
     }
 
-    private function userWithPermissions(array $permissionNames): User
+    private function userWithPermissions(array $permissionNames, ?string $roleName = null): User
     {
-        $role = Role::factory()->create();
+        $role = $roleName
+            ? Role::firstOrCreate(['name' => $roleName], ['description' => ucfirst($roleName)])
+            : Role::factory()->create();
         $role->permissions()->sync($this->permissions($permissionNames));
 
         return User::factory()->create(['role_id' => $role->id]);
@@ -44,9 +46,45 @@ class ActivityLogsTest extends TestCase
         $this->getJson('/api/activity-logs')->assertForbidden();
     }
 
+    public function test_audit_logs_are_admin_only_even_with_the_permission(): void
+    {
+        $doctor = $this->userWithPermissions(['audit_logs.view'], 'doctor');
+        $this->actingAs($doctor, 'sanctum');
+
+        $this->getJson('/api/activity-logs')->assertForbidden();
+    }
+
+    public function test_admin_can_filter_sensitive_clinical_logs(): void
+    {
+        $admin = $this->userWithPermissions(['audit_logs.view'], 'admin');
+        $this->actingAs($admin, 'sanctum');
+
+        ActivityLog::record($admin, 'Updated a medical record', 'Medical Records');
+        ActivityLog::record($admin, 'Signed in to the web clinic system', 'System');
+
+        $this->getJson('/api/activity-logs?clinical=1')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.module', 'Medical Records');
+    }
+
+    public function test_sign_in_is_recorded_in_the_audit_trail(): void
+    {
+        $user = $this->userWithPermissions([], 'nurse');
+        $user->update(['password' => 'password123']);
+
+        $this->postJson('/api/login', ['email' => $user->email, 'password' => 'password123', 'client' => 'web'])->assertOk();
+
+        $this->assertDatabaseHas('activity_logs', [
+            'user_id' => $user->id,
+            'module' => 'System',
+            'action' => 'Signed in to the web clinic system',
+        ]);
+    }
+
     public function test_user_with_permission_can_list_activity_logs(): void
     {
-        $authorizedUser = $this->userWithPermissions(['audit_logs.view']);
+        $authorizedUser = $this->userWithPermissions(['audit_logs.view'], 'admin');
         $this->actingAs($authorizedUser, 'sanctum');
 
         // Create log with author
@@ -89,7 +127,7 @@ class ActivityLogsTest extends TestCase
 
     public function test_activity_logs_filtering_by_module_and_search(): void
     {
-        $authorizedUser = $this->userWithPermissions(['audit_logs.view']);
+        $authorizedUser = $this->userWithPermissions(['audit_logs.view'], 'admin');
         $this->actingAs($authorizedUser, 'sanctum');
 
         ActivityLog::create([

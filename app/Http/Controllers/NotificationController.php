@@ -67,7 +67,49 @@ class NotificationController extends Controller
     }
 
     /**
-     * Send a notification (admin/staff with notifications.send permission).
+     * Users a notification can be sent to: every active account except the
+     * sender, grouped client-side by role. Available to anyone who can send
+     * notifications (not only user managers).
+     */
+    public function recipients(Request $request): JsonResponse
+    {
+        $search = trim((string) $request->query('search', ''));
+
+        $users = User::with('role')
+            ->where('status', 'active')
+            ->where('id', '!=', $request->user()->id)
+            ->when($search !== '', fn ($q) => $q->where(fn ($sub) => $sub
+                ->where('name', 'like', "%{$search}%")
+                ->orWhere('email', 'like', "%{$search}%")
+                ->orWhere('patient_id', 'like', "%{$search}%")))
+            ->orderBy('name')
+            ->get();
+
+        return response()->json(['data' => $users->map(fn (User $u) => [
+            'id' => $u->id,
+            'name' => $u->name,
+            'email' => $u->email,
+            'role' => $u->role?->name,
+            'patientId' => $u->patient_id,
+        ])->values()]);
+    }
+
+    /**
+     * Notifications the signed-in user has sent, newest first, with recipients.
+     */
+    public function sent(Request $request): AnonymousResourceCollection
+    {
+        $notifications = Notification::with(['user.role', 'sender'])
+            ->where('sender_id', $request->user()->id)
+            ->orderByDesc('created_at')
+            ->limit(200)
+            ->get();
+
+        return NotificationResource::collection($notifications);
+    }
+
+    /**
+     * Send a notification to one selected user (staff with notifications.send).
      */
     public function store(StoreNotificationRequest $request): JsonResponse
     {
@@ -75,15 +117,16 @@ class NotificationController extends Controller
 
         $notification = Notification::create([
             'user_id' => $validated['user_id'],
+            'sender_id' => $request->user()->id,
             'title' => $validated['title'],
             'message' => $validated['message'],
             'type' => $validated['type'] ?? 'system',
             'category' => $validated['category'] ?? null,
-            'source' => $validated['source'] ?? null,
+            'source' => $validated['source'] ?? $request->user()->name,
             'metadata' => $validated['metadata'] ?? null,
         ]);
 
-        return (new NotificationResource($notification))->response()->setStatusCode(201);
+        return (new NotificationResource($notification->load(['user.role', 'sender'])))->response()->setStatusCode(201);
     }
 
     /**
@@ -117,7 +160,8 @@ class NotificationController extends Controller
      */
     public function destroy(Request $request, Notification $notification): JsonResponse
     {
-        if ($notification->user_id !== $request->user()->id) {
+        // Recipients delete from their inbox; senders can withdraw what they sent.
+        if ($notification->user_id !== $request->user()->id && $notification->sender_id !== $request->user()->id) {
             abort(403, 'You do not have access to this notification.');
         }
 

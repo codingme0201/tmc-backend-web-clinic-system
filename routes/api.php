@@ -4,7 +4,6 @@ use App\Http\Controllers\AcademicProgramController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\AuthController;
-use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\ClinicInsightsController;
 use App\Http\Controllers\ClinicStaffController;
 use App\Http\Controllers\ConsultationController;
@@ -109,9 +108,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // Medical staff directory & credentials
     Route::get('/clinic-staff', [ClinicStaffController::class, 'index'])->middleware('permission:schedules.view');
     Route::get('/clinic-staff/{user}', [ClinicStaffController::class, 'show'])->middleware('permission:schedules.view');
-    Route::put('/clinic-staff/{user}/profile', [ClinicStaffController::class, 'update'])->middleware('permission:users.update');
     Route::post('/clinic-staff/{user}/verify', [ClinicStaffController::class, 'verify'])->middleware('permission:users.update');
-    // Each doctor/nurse/front desk member maintains their own credentials.
+    // Each doctor/nurse maintains their own background and credentials —
+    // nobody else (administrators included) can edit them.
     Route::get('/me/staff-profile', [ClinicStaffController::class, 'me'])->middleware('staff.user');
     Route::put('/me/staff-profile', [ClinicStaffController::class, 'updateMine'])->middleware('staff.user');
 
@@ -148,6 +147,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/consultations/{consultation}', [ConsultationController::class, 'update'])->middleware('permission:consultations.update');
     Route::post('/consultations/{consultation}/complete', [ConsultationController::class, 'complete'])->middleware('permission:consultations.update');
     Route::post('/consultations/{consultation}/follow-up', [ConsultationController::class, 'scheduleFollowUp'])->middleware('permission:consultations.update');
+    Route::delete('/consultations/{consultation}', [ConsultationController::class, 'destroy'])->middleware('permission:consultations.delete');
 
     // Medical records (+ nested conditions/allergies/medications/history)
     Route::get('/medical-records', [MedicalRecordController::class, 'index'])->middleware('permission:medical_records.view');
@@ -191,19 +191,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/prescriptions', [PrescriptionController::class, 'store'])->middleware('permission:prescriptions.create');
     Route::patch('/prescriptions/{prescription}', [PrescriptionController::class, 'update'])->middleware('permission:prescriptions.update');
 
-    // Clinic Calendar (Module 9)
-    Route::get('/calendar', [CalendarController::class, 'index'])->middleware('permission:calendar.view');
-    Route::get('/calendar/events', [CalendarController::class, 'indexEvents'])->middleware('permission:calendar.view');
-    Route::get('/calendar/events/{event}', [CalendarController::class, 'showEvent'])->middleware('permission:calendar.view');
-    Route::post('/calendar/events', [CalendarController::class, 'storeEvent'])->middleware('permission:calendar.create');
-    Route::put('/calendar/events/{event}', [CalendarController::class, 'updateEvent'])->middleware('permission:calendar.update');
-    Route::delete('/calendar/events/{event}', [CalendarController::class, 'destroyEvent'])->middleware('permission:calendar.delete');
-
-    // Unavailable schedules (block)
-    Route::get('/calendar/blocked', [CalendarController::class, 'indexBlocked'])->middleware('permission:calendar.view');
-    Route::post('/calendar/blocked', [CalendarController::class, 'blockSchedule'])->middleware('permission:calendar.block');
-    Route::delete('/calendar/blocked/{block}', [CalendarController::class, 'destroyBlock'])->middleware('permission:calendar.block');
-
     // Dashboard insights (activity bars + peak hours)
     Route::get('/insights/activity', [ClinicInsightsController::class, 'activity'])->middleware('permission:dashboard.view');
     Route::get('/insights/peak-hours', [ClinicInsightsController::class, 'peakHours'])->middleware('permission:dashboard.view');
@@ -221,6 +208,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Notifications (Module 11)
     Route::get('/notifications', [NotificationController::class, 'index'])->middleware('permission:notifications.view');
     Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount'])->middleware('permission:notifications.view');
+    Route::get('/notifications/recipients', [NotificationController::class, 'recipients'])->middleware('permission:notifications.send');
+    Route::get('/notifications/sent', [NotificationController::class, 'sent'])->middleware('permission:notifications.send');
     Route::get('/notifications/{notification}', [NotificationController::class, 'show'])->middleware('permission:notifications.view');
     Route::post('/notifications', [NotificationController::class, 'store'])->middleware('permission:notifications.send');
     Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markAsRead'])->middleware('permission:notifications.view');
@@ -243,15 +232,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/settings', [SettingsController::class, 'update'])->middleware('permission:settings.update');
 
     // Activity & Audit Logs
-    Route::middleware('permission:audit_logs.view')->group(function () {
-        Route::get('/activity-logs', [ActivityLogController::class, 'index']);
-    });
+    // Audit logs are visible to the administrator only.
+    Route::get('/activity-logs', [ActivityLogController::class, 'index'])->middleware(['admin', 'permission:audit_logs.view']);
     // Client-side activity entries — clinic staff only, so students cannot
     // write into the audit trail.
     Route::post('/activity-logs', [ActivityLogController::class, 'store'])->middleware('staff.user');
 
     // Student Self-Service (Mobile Client) — student/patient accounts only.
-    Route::prefix('me')->middleware('patient.user')->group(function () {
+    Route::prefix('me')->middleware(['patient.user', 'student.activity'])->group(function () {
         Route::get('/profile', [PatientController::class, 'myProfile']);
         Route::put('/profile', [PatientController::class, 'updateMyProfile']);
         Route::get('/appointment-options', [AppointmentController::class, 'appointmentOptions']);
@@ -273,8 +261,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markAsRead']);
         Route::patch('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
         Route::get('/clinic-information', [SettingsController::class, 'publicInfo']);
-        Route::get('/clinic-activities', [CalendarController::class, 'publicEvents']);
         Route::get('/staff-schedules', [StaffScheduleController::class, 'publicIndex']);
+        Route::get('/clinic-staff', [ClinicStaffController::class, 'publicIndex']);
+        Route::get('/clinic-staff/{user}', [ClinicStaffController::class, 'publicShow']);
         Route::get('/search', [PatientController::class, 'search']);
         Route::post('/support', [PatientController::class, 'submitSupport'])->middleware('throttle:5,1');
     });

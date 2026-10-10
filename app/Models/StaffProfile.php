@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
-    'user_id', 'position', 'specialization', 'contact_number',
+    'user_id', 'position', 'specialization', 'background', 'contact_number',
     'license_type', 'license_number', 'license_issued_at', 'license_expires_at',
     'other_credentials', 'credential_status', 'verified_by', 'verified_at', 'verification_notes',
 ])]

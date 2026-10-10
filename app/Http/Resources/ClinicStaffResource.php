@@ -29,6 +29,7 @@ class ClinicStaffResource extends JsonResource
             'roleDescription' => $this->role?->description,
             'position' => $profile?->position ?? '',
             'specialization' => $profile?->specialization ?? '',
+            'background' => $profile?->background ?? '',
             'contactNumber' => $profile?->contact_number ?? '',
             'credentials' => [
                 'licenseType' => $profile?->license_type ?? '',

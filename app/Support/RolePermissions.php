@@ -11,7 +11,8 @@ namespace App\Support;
  *   medical records and certificate preparation (no prescribing).
  * - Front Desk: patient registration, appointment requests, doctor
  *   assignment, check-in and the waiting queue (no clinical records).
- * - Admin: every permission (granted separately).
+ * - Admin: every permission (granted separately). Audit logs are
+ *   admin-only, and there is exactly one admin account.
  */
 class RolePermissions
 {
@@ -21,16 +22,14 @@ class RolePermissions
             'permissions' => [
                 'dashboard.view',
                 'appointments.view', 'appointments.update',
-                'consultations.view', 'consultations.create', 'consultations.update',
+                'consultations.view', 'consultations.create', 'consultations.update', 'consultations.delete',
                 'medical_records.view', 'medical_records.create', 'medical_records.update',
                 'medical_certificates.view', 'medical_certificates.create', 'medical_certificates.update',
                 'medical_certificates.approve',
                 'prescriptions.view', 'prescriptions.create', 'prescriptions.update',
                 'patients.view', 'patients.create',
                 'schedules.view',
-                'calendar.view', 'calendar.create', 'calendar.update', 'calendar.delete', 'calendar.block',
                 'reports.view', 'reports.export',
-                'audit_logs.view',
                 'notifications.view', 'notifications.send',
             ],
         ],
@@ -45,9 +44,7 @@ class RolePermissions
                 'prescriptions.view',
                 'patients.view', 'patients.create',
                 'schedules.view',
-                'calendar.view', 'calendar.create', 'calendar.update', 'calendar.delete', 'calendar.block',
                 'reports.view', 'reports.export',
-                'audit_logs.view',
                 'notifications.view',
             ],
         ],
@@ -59,7 +56,6 @@ class RolePermissions
                 'appointments.approve', 'appointments.reject', 'appointments.reschedule',
                 'patients.view', 'patients.create', 'patients.update',
                 'schedules.view',
-                'calendar.view',
                 'notifications.view',
             ],
         ],

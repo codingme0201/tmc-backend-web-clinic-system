@@ -40,6 +40,17 @@ class User extends Authenticatable
     public const CLINIC_STAFF_ROLES = ['doctor', 'nurse', 'front_desk'];
 
     /**
+     * Roles whose professional profile/background is edited only by the
+     * staff member themselves (and shown to students in the mobile app).
+     */
+    public const PROFILE_SELF_EDIT_ROLES = ['doctor', 'nurse'];
+
+    /**
+     * The single system administrator role.
+     */
+    public const ADMIN_ROLE = 'admin';
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
@@ -102,6 +113,11 @@ class User extends Authenticatable
     public function unavailableSchedules(): HasMany
     {
         return $this->hasMany(UnavailableSchedule::class, 'created_by');
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->role?->name === self::ADMIN_ROLE;
     }
 
     /**

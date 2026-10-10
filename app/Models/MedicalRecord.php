@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
@@ -22,6 +23,15 @@ class MedicalRecord extends Model
         return [
             'last_updated' => 'date:Y-m-d',
         ];
+    }
+
+    /**
+     * The registry profile — the source of truth for demographics the
+     * student enters in the mobile app (age, contact, address, ...).
+     */
+    public function patient(): BelongsTo
+    {
+        return $this->belongsTo(Patient::class, 'patient_id', 'patient_id');
     }
 
     public function histories(): HasMany

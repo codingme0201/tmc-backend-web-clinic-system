@@ -3,14 +3,12 @@
 namespace Tests\Feature;
 
 use App\Models\Appointment;
-use App\Models\ClinicEvent;
 use App\Models\Consultation;
 use App\Models\MedicalRecord;
 use App\Models\Patient;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\SystemSetting;
-use App\Models\UnavailableSchedule;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -182,25 +180,6 @@ class EndpointHardeningTest extends TestCase
 
     // --- Appointments --------------------------------------------------------------
 
-    public function test_timed_afternoon_block_is_enforced(): void
-    {
-        $date = $this->futureWeekday();
-        UnavailableSchedule::create([
-            'start_date' => $date, 'end_date' => $date, 'all_day' => false,
-            'start_time' => '13:00', 'end_time' => '15:00', 'reason' => 'Seminar',
-            'created_by' => $this->staff()->id,
-        ]);
-        $this->actingAs($this->student(), 'sanctum');
-
-        $this->postJson('/api/me/appointments', [
-            'type' => 'Check-up', 'reason' => 'Headache', 'date' => $date, 'time' => '01:30 PM',
-        ])->assertUnprocessable();
-
-        $this->postJson('/api/me/appointments', [
-            'type' => 'Check-up', 'reason' => 'Headache', 'date' => $date, 'time' => '08:00 AM',
-        ])->assertCreated();
-    }
-
     public function test_online_booking_toggle_and_daily_cap_are_enforced(): void
     {
         $date = $this->futureWeekday();
@@ -261,17 +240,14 @@ class EndpointHardeningTest extends TestCase
 
     public function test_student_clinic_endpoints_return_public_data_only(): void
     {
-        ClinicEvent::create(['title' => 'Blood drive', 'start_date' => now()->addDay()->toDateString(), 'status' => 'Scheduled', 'date' => '']);
-        ClinicEvent::create(['title' => 'Cancelled talk', 'start_date' => now()->addDay()->toDateString(), 'status' => 'Cancelled', 'date' => '']);
         $this->actingAs($this->student(), 'sanctum');
 
         $info = $this->getJson('/api/me/clinic-information')->assertOk()->json('data');
         $this->assertArrayNotHasKey('notificationSettings', $info);
         $this->assertArrayNotHasKey('maxDailyAppointments', $info);
 
-        $titles = collect($this->getJson('/api/me/clinic-activities')->assertOk()->json('data'))->pluck('title');
-        $this->assertContains('Blood drive', $titles);
-        $this->assertNotContains('Cancelled talk', $titles);
+        // The clinic calendar (and its student "clinic activities" feed) was removed.
+        $this->getJson('/api/me/clinic-activities')->assertNotFound();
 
         $this->getJson('/api/me/notifications/unread-count')->assertOk()->assertJsonPath('count', 0);
     }
@@ -399,7 +375,7 @@ class EndpointHardeningTest extends TestCase
     public function test_deactivating_a_user_revokes_their_tokens(): void
     {
         $admin = $this->staff(['users.update']);
-        $target = $this->student();
+        $target = $this->staff([], 'nurse');
         $target->createToken('device');
         $this->actingAs($admin, 'sanctum');
 

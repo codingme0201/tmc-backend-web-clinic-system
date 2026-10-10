@@ -26,6 +26,27 @@ class Patient extends Model
         ];
     }
 
+    protected static function booted(): void
+    {
+        // Keep the medical record's demographic copy in step with whatever
+        // the student (mobile app) or staff (web) last saved on the profile.
+        static::saved(function (Patient $patient) {
+            if (! $patient->wasChanged(['name', 'age', 'type', 'course_dept', 'contact', 'emergency_contact', 'patient_id']) && ! $patient->wasRecentlyCreated) {
+                return;
+            }
+
+            MedicalRecord::whereIn('patient_id', array_unique(array_filter([$patient->getOriginal('patient_id'), $patient->patient_id])))
+                ->update([
+                    'name' => $patient->name,
+                    'age' => $patient->age ?? 0,
+                    'type' => $patient->type ?: 'Student',
+                    'course_dept' => $patient->course_dept ?? '',
+                    'contact' => $patient->contact,
+                    'emergency_contact' => $patient->emergency_contact,
+                ]);
+        });
+    }
+
     public function isProfileComplete(): bool
     {
         return !empty($this->first_name)

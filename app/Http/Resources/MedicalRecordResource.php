@@ -17,16 +17,41 @@ class MedicalRecordResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        // Demographics come from the patient profile (what the student
+        // entered in the mobile app); the record's own copy is a fallback.
+        $patient = $this->patient;
+        $age = $patient?->age ?: ($this->age ?: null);
+
         return [
             'id' => $this->id,
             'patientId' => $this->patient_id,
-            'name' => $this->name,
-            'age' => $this->age,
+            'name' => $patient?->name ?: $this->name,
+            'age' => $age,
             'sex' => $this->sex,
-            'type' => $this->type,
-            'courseDept' => $this->course_dept,
-            'contact' => $this->contact ?? '',
-            'emergencyContact' => $this->emergency_contact ?? '',
+            'type' => $patient?->type ?: $this->type,
+            'courseDept' => $patient?->course_dept ?: $this->course_dept,
+            'contact' => $patient?->contact ?: ($this->contact ?? ''),
+            'emergencyContact' => $patient?->emergency_contact ?: ($this->emergency_contact ?? ''),
+            // Everything the student entered through the mobile app.
+            'studentProfile' => $patient ? [
+                'studentId' => $patient->patient_id,
+                'firstName' => $patient->first_name ?? '',
+                'middleName' => $patient->middle_name ?? '',
+                'lastName' => $patient->last_name ?? '',
+                'age' => $patient->age,
+                'courseDept' => $patient->course_dept ?? '',
+                'block' => $patient->block ?? '',
+                'address' => $patient->address ?? '',
+                'nationality' => $patient->nationality ?? '',
+                'contact' => $patient->contact ?? '',
+                'email' => $patient->user?->email ?? '',
+                'emergencyContactName' => $patient->emergency_contact_name ?? '',
+                'emergencyContactPhone' => $patient->emergency_contact_phone ?? '',
+                'allergies' => $patient->allergies ?? '',
+                'history' => $patient->history ?? '',
+                'isProfileComplete' => $patient->isProfileComplete(),
+                'updatedAt' => $patient->updated_at?->toIso8601String(),
+            ] : null,
             'status' => $this->status,
             'lastUpdated' => $this->last_updated?->format('Y-m-d') ?? ($this->updated_at?->format('Y-m-d') ?? now()->toDateString()),
             'medicalHistory' => $this->histories->map(fn ($h) => [

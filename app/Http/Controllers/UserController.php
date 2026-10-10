@@ -9,6 +9,7 @@ use App\Http\Requests\UpdateUserRequest;
 use App\Http\Requests\UpdateUserStatusRequest;
 use App\Http\Resources\UserResource;
 use App\Models\Patient;
+use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -65,6 +66,10 @@ class UserController extends Controller
     public function store(StoreUserRequest $request): JsonResponse
     {
         $validated = $request->validated();
+
+        if ($this->isAdminRoleId($validated['role_id'])) {
+            return $this->singleAdminResponse();
+        }
 
         $firstName = $validated['firstName'] ?? $validated['first_name'] ?? null;
         $middleName = $validated['middleName'] ?? $validated['middle_name'] ?? null;
@@ -226,13 +231,18 @@ class UserController extends Controller
     /**
      * Activate or deactivate a user account.
      *
-     * Administrators cannot deactivate their own account to prevent
-     * accidental lockout.
+     * Only doctor, nurse and front desk accounts can be activated or
+     * deactivated — never the administrator (or your own) account.
      */
     public function updateStatus(UpdateUserStatusRequest $request, User $user): UserResource|JsonResponse
     {
-        if ($request->user()->id === $user->id && $request->validated('status') === 'inactive') {
-            return response()->json(['message' => 'You cannot deactivate your own account.'], 409);
+        if ($request->user()->id === $user->id) {
+            return response()->json(['message' => 'You cannot activate or deactivate your own account.'], 409);
+        }
+
+        $user->loadMissing('role');
+        if (! in_array($user->role?->name, User::CLINIC_STAFF_ROLES, true)) {
+            return response()->json(['message' => 'Only doctor, nurse and front desk accounts can be activated or deactivated.'], 409);
         }
 
         $user->update(['status' => $request->validated('status')]);
@@ -248,8 +258,15 @@ class UserController extends Controller
     /**
      * Assign a role to a user.
      */
-    public function updateRole(UpdateUserRoleRequest $request, User $user): UserResource
+    public function updateRole(UpdateUserRoleRequest $request, User $user): UserResource|JsonResponse
     {
+        if ($user->isAdmin()) {
+            return response()->json(['message' => 'The administrator account role cannot be changed.'], 409);
+        }
+        if ($this->isAdminRoleId($request->validated('role_id'))) {
+            return $this->singleAdminResponse();
+        }
+
         $user->update(['role_id' => $request->validated('role_id')]);
 
         return new UserResource($user->fresh('role'));
@@ -283,19 +300,29 @@ class UserController extends Controller
             return response()->json(['message' => 'You cannot delete your own account.'], 409);
         }
 
-        if ($user->role?->name === 'admin') {
-            $otherAdmins = User::where('id', '!=', $user->id)
-                ->where('status', 'active')
-                ->whereHas('role', fn ($q) => $q->where('name', 'admin'))
-                ->exists();
-            if (! $otherAdmins) {
-                return response()->json(['message' => 'You cannot delete the last active administrator.'], 409);
-            }
+        if ($user->isAdmin()) {
+            return response()->json(['message' => 'The administrator account cannot be deleted.'], 409);
         }
 
         $user->tokens()->delete();
         $user->delete();
 
         return response()->json(['message' => 'User deleted successfully.']);
+    }
+
+    private function isAdminRoleId(int|string|null $roleId): bool
+    {
+        return $roleId !== null && Role::whereKey($roleId)->value('name') === User::ADMIN_ROLE;
+    }
+
+    /**
+     * The web admin system has exactly one administrator account.
+     */
+    private function singleAdminResponse(): JsonResponse
+    {
+        return response()->json([
+            'message' => 'The system can only have one administrator account. Choose a doctor, nurse, front desk or student role.',
+            'errors' => ['role_id' => ['Another administrator account cannot be created.']],
+        ], 422);
     }
 }

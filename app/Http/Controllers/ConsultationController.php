@@ -76,6 +76,19 @@ class ConsultationController extends Controller
     }
 
     /**
+     * Delete a consultation from the list. Linked prescriptions,
+     * certificates and follow-up appointments keep their data; their
+     * reference to this consultation is cleared by the foreign keys.
+     */
+    public function destroy(Consultation $consultation): JsonResponse
+    {
+        $reference = $consultation->reference;
+        $consultation->delete();
+
+        return response()->json(['message' => "Consultation {$reference} deleted."]);
+    }
+
+    /**
      * List consultations for the authenticated patient.
      */
     public function myConsultations(Request $request): AnonymousResourceCollection

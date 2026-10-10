@@ -30,7 +30,7 @@ class MedicalRecordController extends Controller
      */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $query = MedicalRecord::with(['histories', 'conditions', 'allergies', 'medications']);
+        $query = MedicalRecord::with(['patient.user', 'histories', 'conditions', 'allergies', 'medications']);
 
         $search = trim((string) $request->query('search'));
         if ($search !== '') {

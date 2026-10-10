@@ -438,30 +438,27 @@ class ClinicWorkflowTest extends TestCase
             ->assertJsonPath('data.0.diagnosis', 'Confidential Dx');
     }
 
-    // --- Calendar closures -------------------------------------------------------------------
+    // --- Clinic calendar removed --------------------------------------------------------------
 
-    public function test_non_working_calendar_ranges_block_bookings_on_every_day_in_range(): void
+    public function test_clinic_calendar_is_removed(): void
     {
         $this->actingAs($this->admin(), 'sanctum');
         $start = now()->addDays(10)->startOfDay();
 
+        // Leftover calendar rows no longer close the clinic.
         ClinicEvent::create([
             'title' => 'Semestral Break', 'type' => 'Non-Working Day', 'status' => 'Scheduled', 'all_day' => true,
             'start_date' => $start->toDateString(), 'end_date' => $start->copy()->addDays(3)->toDateString(), 'date' => '',
         ]);
-        ClinicEvent::create([
-            'title' => 'Wellness Talk', 'type' => 'Seminar', 'status' => 'Scheduled',
-            'start_date' => $start->copy()->addDays(5)->toDateString(), 'end_date' => $start->copy()->addDays(5)->toDateString(), 'date' => '',
-        ]);
 
-        $payload = ['patient' => 'Range Test', 'type' => 'Check-up', 'reason' => 'x', 'time' => '09:00 AM'];
+        $this->getJson('/api/calendar')->assertNotFound();
+        $this->getJson('/api/calendar/events')->assertNotFound();
+        $this->postJson('/api/calendar/blocked', [])->assertNotFound();
 
-        $this->postJson('/api/appointments', [...$payload, 'date' => $start->copy()->addDays(2)->toDateString()])
-            ->assertUnprocessable()
-            ->assertJsonFragment(['message' => "The clinic is closed on {$start->copy()->addDays(2)->toDateString()} (Non-Working Day: Semestral Break). Please choose another date."]);
-
-        $this->postJson('/api/appointments', [...$payload, 'date' => $start->copy()->addDays(4)->toDateString()])->assertCreated();
-        $this->postJson('/api/appointments', [...$payload, 'date' => $start->copy()->addDays(5)->toDateString(), 'time' => '10:00 AM'])->assertCreated();
+        $this->postJson('/api/appointments', [
+            'patient' => 'Range Test', 'type' => 'Check-up', 'reason' => 'x', 'time' => '09:00 AM',
+            'date' => $start->copy()->addDays(2)->toDateString(),
+        ])->assertCreated();
     }
 
     // --- Course / department dropdown --------------------------------------------------------
@@ -570,5 +567,13 @@ class ClinicWorkflowTest extends TestCase
         $this->assertTrue($doctor->contains('appointments.update'));
 
         $this->assertTrue((bool) Role::where('name', 'front_desk')->value('is_system'));
+
+        // Audit logs are admin-only; the clinic calendar is gone.
+        foreach (['doctor', 'nurse', 'front_desk'] as $role) {
+            $this->assertFalse($permissions($role)->contains('audit_logs.view'), "{$role} must not view audit logs");
+        }
+        $this->assertTrue($permissions('admin')->contains('audit_logs.view'));
+        $this->assertSame(0, \App\Models\Permission::where('name', 'like', 'calendar.%')->count());
+        $this->assertTrue($doctor->contains('consultations.delete'));
     }
 }

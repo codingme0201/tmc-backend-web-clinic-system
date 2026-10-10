@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\Appointment;
 use App\Models\Permission;
 use App\Models\Role;
-use App\Models\UnavailableSchedule;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -359,32 +358,5 @@ class AppointmentsTest extends TestCase
 
         $response->assertStatus(422)
             ->assertJsonPath('message', 'The selected doctor/staff (Dr. Mendoza) already has an appointment booked on 2026-08-10 at 09:00 AM.');
-    }
-
-    public function test_booking_fails_when_date_is_blocked_by_unavailable_schedule(): void
-    {
-        $admin = $this->adminUser();
-        $this->actingAsUser($admin);
-
-        UnavailableSchedule::create([
-            'start_date' => '2026-08-10',
-            'end_date' => '2026-08-12',
-            'all_day' => true,
-            'reason' => 'Clinic Disinfection & Maintenance',
-            'created_by' => $admin->id,
-        ]);
-
-        $response = $this->postJson('/api/appointments', [
-            'patient' => 'Jane Doe',
-            'patient_id' => '24-001234',
-            'type' => 'Check-up',
-            'reason' => 'Routine follow-up',
-            'date' => '2026-08-11',
-            'time' => '09:00 AM',
-            'staff' => 'Dr. Mendoza',
-        ]);
-
-        $response->assertStatus(422)
-            ->assertJsonPath('message', 'The selected date or time slot is unavailable due to a clinic schedule block.');
     }
 }

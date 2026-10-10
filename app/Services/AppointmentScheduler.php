@@ -3,10 +3,8 @@
 namespace App\Services;
 
 use App\Models\Appointment;
-use App\Models\ClinicEvent;
 use App\Models\StaffSchedule;
 use App\Models\SystemSetting;
-use App\Models\UnavailableSchedule;
 use App\Models\User;
 use App\Support\ClinicSchedule;
 use Illuminate\Database\Eloquent\Builder;
@@ -14,7 +12,7 @@ use Illuminate\Database\Eloquent\Builder;
 /**
  * Booking rules shared by staff booking, student self-service, rescheduling,
  * doctor assignment and follow-up scheduling, so every entry point checks
- * the same calendar, schedule and slot data.
+ * the same doctor/nurse schedule and slot data.
  */
 class AppointmentScheduler
 {
@@ -31,19 +29,6 @@ class AppointmentScheduler
         bool $enforceDailyLimit = false,
     ): ?string {
         $settings = SystemSetting::getInstance();
-        $minutes = ClinicSchedule::toMinutes($time);
-
-        if ($closure = ClinicEvent::nonWorkingOn($date)->first()) {
-            return "The clinic is closed on {$date} ({$closure->type}: {$closure->title}). Please choose another date.";
-        }
-
-        $blocks = UnavailableSchedule::whereDate('start_date', '<=', $date)
-            ->whereDate('end_date', '>=', $date)
-            ->get();
-
-        if ($blocks->contains(fn ($block) => $this->blockCovers($block, $minutes))) {
-            return 'The selected date or time slot is unavailable due to a clinic schedule block.';
-        }
 
         if ($enforceDailyLimit && $this->isDayFull($date, $settings, $ignoreAppointmentId)) {
             return "The clinic has reached its maximum number of appointments for {$date}. Please choose another date.";
@@ -91,19 +76,13 @@ class AppointmentScheduler
     {
         $settings = SystemSetting::getInstance();
         $buffer = (int) $settings->appointment_buffer_minutes;
-        $closed = ClinicEvent::nonWorkingOn($date)->exists();
-        $blocks = UnavailableSchedule::whereDate('start_date', '<=', $date)
-            ->whereDate('end_date', '>=', $date)
-            ->get();
         $active = $this->activeAppointmentsOn($date)->get(['time', 'staff', 'staff_id', 'patient_id']);
         $isFull = $this->isDayFull($date, $settings);
         $isPast = $date < now()->toDateString();
 
-        return collect(ClinicSchedule::TIME_SLOTS)->map(function (string $slot) use ($closed, $blocks, $active, $staff, $patientId, $buffer, $isFull, $isPast, $date) {
-            $minutes = ClinicSchedule::toMinutes($slot);
+        return collect(ClinicSchedule::TIME_SLOTS)->map(function (string $slot) use ($active, $staff, $patientId, $buffer, $isFull, $isPast, $date) {
             $reason = match (true) {
                 $isPast => 'past',
-                $closed, $blocks->contains(fn ($b) => $this->blockCovers($b, $minutes)) => 'blocked',
                 $patientId && $active->contains(fn ($a) => $a->patient_id === $patientId && $this->timesOverlap($a->time, $slot, 0)) => 'yours',
                 $staff && $this->isMarkedUnavailable($staff->id, $date, $slot) => 'blocked',
                 $staff && $active->contains(fn ($a) => ($a->staff_id === $staff->id || $a->staff === $staff->name) && $this->timesOverlap($a->time, $slot, $buffer)) => 'booked',
@@ -191,25 +170,5 @@ class AppointmentScheduler
         }
 
         return abs($am - $bm) < max(1, $bufferMinutes);
-    }
-
-    /**
-     * All-day blocks (or blocks without both times) cover the whole day;
-     * timed blocks cover [start, end).
-     */
-    private function blockCovers(UnavailableSchedule $block, ?int $minutes): bool
-    {
-        if ($block->all_day || ! $block->start_time || ! $block->end_time) {
-            return true;
-        }
-
-        $start = ClinicSchedule::toMinutes($block->start_time);
-        $end = ClinicSchedule::toMinutes($block->end_time);
-
-        if ($minutes === null || $start === null || $end === null) {
-            return true;
-        }
-
-        return $minutes >= $start && $minutes < $end;
     }
 }

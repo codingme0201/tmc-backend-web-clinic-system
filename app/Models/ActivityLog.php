@@ -15,4 +15,18 @@ class ActivityLog extends Model
     {
         return $this->belongsTo(User::class, 'user_id');
     }
+
+    /**
+     * Append an entry to the audit trail on behalf of a user.
+     */
+    public static function record(?User $user, string $action, ?string $module = null): self
+    {
+        return self::create([
+            'user_id' => $user?->id,
+            'time' => now()->format('h:i A'),
+            'user' => $user?->name ?? 'System',
+            'module' => $module,
+            'action' => $action,
+        ]);
+    }
 }

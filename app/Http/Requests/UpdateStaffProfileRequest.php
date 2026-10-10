@@ -12,20 +12,20 @@ use Illuminate\Validation\Validator;
 class UpdateStaffProfileRequest extends FormRequest
 {
     /**
-     * Doctors/nurses update their own credentials through /me/staff-profile;
-     * administrators through the permission-guarded clinic-staff route.
+     * Only doctors and nurses edit a profile, and only their own (through
+     * /me/staff-profile) — administrators can view and verify, not edit.
      */
     public function authorize(): bool
     {
-        return true;
+        return in_array($this->user()?->role?->name, User::PROFILE_SELF_EDIT_ROLES, true);
     }
 
     /**
-     * The staff member whose profile is being edited.
+     * The staff member whose profile is being edited (always the signed-in user).
      */
     public function targetUser(): User
     {
-        return $this->route('user') ?? $this->user();
+        return $this->user();
     }
 
     protected function prepareForValidation(): void
@@ -45,6 +45,7 @@ class UpdateStaffProfileRequest extends FormRequest
         return [
             'position' => ['nullable', 'string', 'max:150'],
             'specialization' => ['nullable', 'string', 'max:150'],
+            'background' => ['nullable', 'string', 'max:3000'],
             'contactNumber' => ['nullable', 'string', 'max:50'],
             'licenseType' => ['nullable', 'required_with:licenseNumber', 'string', Rule::in(StaffProfile::LICENSE_TYPES)],
             'licenseNumber' => [

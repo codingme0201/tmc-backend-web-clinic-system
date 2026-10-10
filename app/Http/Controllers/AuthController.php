@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\LoginRequest;
+use App\Models\ActivityLog;
 use App\Models\Patient;
 use App\Models\Role;
 use App\Models\User;
@@ -69,6 +70,7 @@ class AuthController extends Controller
         }
 
         $token = $user->createToken('tmc-carelink')->plainTextToken;
+        ActivityLog::record($user, $isStudentUser ? 'Signed in to the mobile app' : 'Signed in to the web clinic system', 'System');
 
         return response()->json([
             'token' => $token,
@@ -90,6 +92,7 @@ class AuthController extends Controller
     public function logout(Request $request): JsonResponse
     {
         $request->user()->currentAccessToken()->delete();
+        ActivityLog::record($request->user(), 'Signed out', 'System');
 
         return response()->json(['message' => 'Logged out successfully.']);
     }
@@ -223,6 +226,7 @@ class AuthController extends Controller
         ]);
 
         $token = $user->createToken('tmc-carelink')->plainTextToken;
+        ActivityLog::record($user, $isStudentUser ? 'Signed in to the mobile app' : 'Signed in to the web clinic system', 'System');
 
         return response()->json([
             'token' => $token,

@@ -123,8 +123,7 @@ class PrescriptionController extends Controller
         $date = $validated['date'] ?? now()->toDateString();
 
         $prescription = DB::transaction(function () use ($request, $validated, $date) {
-            $prescriberName = ($validated['prescribed_by'] ?? '') ?: $request->user()->name;
-            $prescriberId = User::where('name', $prescriberName)->value('id');
+            [$prescriberId, $prescriberName] = $this->resolvePrescriber($validated, $request->user());
 
             $prescription = Prescription::create([
                 'reference' => Prescription::nextReference($date, true),
@@ -182,8 +181,13 @@ class PrescriptionController extends Controller
             if (array_key_exists('date', $validated)) {
                 $prescription->prescription_date = $validated['date'];
             }
-            if (array_key_exists('prescribed_by', $validated) && $validated['prescribed_by'] !== null) {
+            if (! empty($validated['prescribed_by_id'])) {
+                $doctor = User::find($validated['prescribed_by_id']);
+                $prescription->prescribed_by_id = $doctor->id;
+                $prescription->prescribed_by = $doctor->name;
+            } elseif (array_key_exists('prescribed_by', $validated) && $validated['prescribed_by'] !== null) {
                 $prescription->prescribed_by = $validated['prescribed_by'] ?: $prescription->prescribed_by;
+                $prescription->prescribed_by_id = User::where('name', $prescription->prescribed_by)->value('id');
             }
 
             if (isset($validated['medications'])) {
@@ -194,6 +198,23 @@ class PrescriptionController extends Controller
         });
 
         return new PrescriptionResource($prescription->loadMissing(['medications', 'consultation']));
+    }
+
+    /**
+     * The prescribing doctor: the selected doctor account, else a matching
+     * name (older clients), else the signed-in user.
+     *
+     * @return array{0: ?int, 1: string}
+     */
+    private function resolvePrescriber(array $validated, User $currentUser): array
+    {
+        if (! empty($validated['prescribed_by_id']) && ($doctor = User::find($validated['prescribed_by_id']))) {
+            return [$doctor->id, $doctor->name];
+        }
+
+        $name = ($validated['prescribed_by'] ?? '') ?: $currentUser->name;
+
+        return [User::where('name', $name)->value('id'), $name];
     }
 
     /**

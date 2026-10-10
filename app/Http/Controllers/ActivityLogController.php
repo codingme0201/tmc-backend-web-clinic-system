@@ -73,13 +73,7 @@ class ActivityLogController extends Controller
             'module' => ['nullable', 'string', 'max:100'],
         ]);
 
-        $entry = ActivityLog::create([
-            'user_id' => $request->user()->id,
-            'time' => now()->format('h:i A'),
-            'user' => $request->user()->name,
-            'module' => $validated['module'] ?? null,
-            'action' => $validated['action'],
-        ]);
+        $entry = ActivityLog::record($request->user(), $validated['action'], $validated['module'] ?? null);
 
         return (new ActivityLogResource($entry->load('author.role')))->response()->setStatusCode(201);
     }

@@ -6,6 +6,7 @@ use App\Http\Requests\StoreRoleRequest;
 use App\Http\Requests\UpdateRolePermissionsRequest;
 use App\Http\Requests\UpdateRoleRequest;
 use App\Http\Resources\RoleResource;
+use App\Models\Permission;
 use App\Models\Role;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -13,6 +14,17 @@ use Illuminate\Support\Facades\DB;
 
 class RoleController extends Controller
 {
+    /**
+     * Roles whose permissions cannot be checked/unchecked: the single admin
+     * account always keeps full access, and students only use the mobile app.
+     */
+    private const LOCKED_ROLES = ['admin', 'student'];
+
+    /**
+     * Permissions that only the administrator may hold.
+     */
+    private const ADMIN_ONLY_PERMISSIONS = ['audit_logs.view'];
+
     /**
      * List all roles with permission and user counts.
      */
@@ -33,7 +45,7 @@ class RoleController extends Controller
     {
         $role = DB::transaction(function () use ($request) {
             $role = Role::create($request->safe(['name', 'description']));
-            $role->permissions()->sync($request->validated('permissions', []));
+            $role->permissions()->sync($this->withoutAdminOnly($request->validated('permissions', [])));
 
             return $role;
         });
@@ -56,13 +68,20 @@ class RoleController extends Controller
     /**
      * Update role information and, when provided, its assigned permissions.
      */
-    public function update(UpdateRoleRequest $request, Role $role): RoleResource
+    public function update(UpdateRoleRequest $request, Role $role): RoleResource|JsonResponse
     {
+        if ($request->has('permissions') && ($locked = $this->lockedResponse($role))) {
+            return $locked;
+        }
+        if ($role->name === 'admin' && $request->filled('name') && $request->input('name') !== 'admin') {
+            return response()->json(['message' => 'The admin role cannot be renamed.'], 409);
+        }
+
         $role = DB::transaction(function () use ($request, $role) {
             $role->update($request->safe(['name', 'description']));
 
             if ($request->has('permissions')) {
-                $role->permissions()->sync($request->validated('permissions'));
+                $role->permissions()->sync($this->withoutAdminOnly($request->validated('permissions')));
             }
 
             return $role;
@@ -100,12 +119,38 @@ class RoleController extends Controller
     /**
      * Replace the permissions assigned to a role.
      */
-    public function updatePermissions(UpdateRolePermissionsRequest $request, Role $role): RoleResource
+    public function updatePermissions(UpdateRolePermissionsRequest $request, Role $role): RoleResource|JsonResponse
     {
-        $role->permissions()->sync($request->validated('permissions'));
+        if ($locked = $this->lockedResponse($role)) {
+            return $locked;
+        }
+
+        $role->permissions()->sync($this->withoutAdminOnly($request->validated('permissions')));
 
         return new RoleResource(
             $role->load('permissions')->loadCount('users')->loadCount('permissions'),
         );
+    }
+
+    private function lockedResponse(Role $role): ?JsonResponse
+    {
+        if (in_array($role->name, self::LOCKED_ROLES, true)) {
+            return response()->json([
+                'message' => "Permissions of the {$role->name} role cannot be changed. Only doctor, nurse and front desk permissions can be edited.",
+            ], 409);
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<int, int|string>  $permissionIds
+     * @return array<int, int|string>
+     */
+    private function withoutAdminOnly(array $permissionIds): array
+    {
+        $adminOnly = Permission::whereIn('name', self::ADMIN_ONLY_PERMISSIONS)->pluck('id')->map(fn ($id) => (string) $id)->all();
+
+        return array_values(array_filter($permissionIds, fn ($id) => ! in_array((string) $id, $adminOnly, true)));
     }
 }

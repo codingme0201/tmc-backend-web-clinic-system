@@ -9,6 +9,7 @@ use App\Models\Appointment;
 use App\Models\Notification;
 use App\Models\StaffProfile;
 use App\Models\User;
+use App\Support\ClinicSchedule;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -53,7 +54,8 @@ class ClinicStaffController extends Controller
     }
 
     /**
-     * A doctor/nurse submits or updates their own credentials.
+     * A doctor/nurse submits or updates their own background and credentials.
+     * Nobody else (including administrators) can edit these profiles.
      */
     public function updateMine(UpdateStaffProfileRequest $request): ClinicStaffResource
     {
@@ -63,13 +65,70 @@ class ClinicStaffController extends Controller
     }
 
     /**
-     * An administrator edits a staff member's profile and credentials.
+     * Doctor/nurse directory for the student mobile app: read-only public
+     * profile (background, specialization, credentials status) and the
+     * upcoming available schedule.
      */
-    public function update(UpdateStaffProfileRequest $request, User $user): ClinicStaffResource
+    public function publicIndex(): JsonResponse
     {
-        $this->ensureClinicStaff($user);
+        $staff = User::with(['role', 'staffProfile', 'staffSchedules' => fn ($q) => $q
+            ->where('status', 'Available')
+            ->whereBetween('date', [now()->toDateString(), now()->addDays(30)->toDateString()])
+            ->orderBy('date')
+            ->orderBy('start_time')])
+            ->where('status', 'active')
+            ->whereHas('role', fn ($q) => $q->whereIn('name', User::PROFILE_SELF_EDIT_ROLES))
+            ->orderBy('name')
+            ->get();
 
-        return $this->saveProfile($user, $request);
+        return response()->json(['data' => $staff->map(fn (User $u) => $this->publicProfile($u))->values()]);
+    }
+
+    public function publicShow(User $user): JsonResponse
+    {
+        $user->loadMissing('role');
+        if ($user->status !== 'active' || ! in_array($user->role?->name, User::PROFILE_SELF_EDIT_ROLES, true)) {
+            abort(404, 'Medical staff member not found.');
+        }
+
+        $user->load(['staffProfile', 'staffSchedules' => fn ($q) => $q
+            ->where('status', 'Available')
+            ->whereBetween('date', [now()->toDateString(), now()->addDays(30)->toDateString()])
+            ->orderBy('date')
+            ->orderBy('start_time')]);
+
+        return response()->json(['data' => $this->publicProfile($user)]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function publicProfile(User $user): array
+    {
+        $profile = $user->staffProfile;
+
+        return [
+            'id' => $user->id,
+            'name' => $user->name,
+            'role' => $user->role?->name,
+            'position' => $profile?->position ?? '',
+            'specialty' => $profile?->specialization ?: ($user->role?->name === 'nurse' ? 'Nursing Services' : 'General Medicine'),
+            'specialization' => $profile?->specialization ?? '',
+            'background' => $profile?->background ?? '',
+            'contactNumber' => $profile?->contact_number ?? '',
+            'email' => $user->email,
+            'licenseType' => $profile?->license_type ?? '',
+            'credentialStatus' => $profile?->credential_status ?? 'Not Submitted',
+            'otherCredentials' => $profile?->other_credentials ?? '',
+            'schedule' => $user->staffSchedules
+                ->sortBy(fn ($s) => [$s->date?->format('Y-m-d'), ClinicSchedule::toMinutes($s->start_time)])
+                ->map(fn ($s) => [
+                    'day' => $s->date?->format('l, M j'),
+                    'date' => $s->date?->format('Y-m-d'),
+                    'startTime' => ClinicSchedule::normalize($s->start_time),
+                    'endTime' => ClinicSchedule::normalize($s->end_time),
+                ])->values()->all(),
+        ];
     }
 
     /**
@@ -123,7 +182,8 @@ class ClinicStaffController extends Controller
         $profile = $user->staffProfile()->first() ?? new StaffProfile(['user_id' => $user->id]);
 
         $map = [
-            'position' => 'position', 'specialization' => 'specialization', 'contactNumber' => 'contact_number',
+            'position' => 'position', 'specialization' => 'specialization', 'background' => 'background',
+            'contactNumber' => 'contact_number',
             'licenseType' => 'license_type', 'licenseNumber' => 'license_number',
             'licenseIssuedAt' => 'license_issued_at', 'licenseExpiresAt' => 'license_expires_at',
             'otherCredentials' => 'other_credentials',

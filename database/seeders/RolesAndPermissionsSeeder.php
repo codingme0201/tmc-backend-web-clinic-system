@@ -69,13 +69,6 @@ class RolesAndPermissionsSeeder extends Seeder
                 ['name' => 'schedules.update', 'label' => 'Update Schedule'],
                 ['name' => 'schedules.delete', 'label' => 'Delete Schedule'],
             ],
-            'Clinic Calendar' => [
-                ['name' => 'calendar.view', 'label' => 'View Clinic Calendar'],
-                ['name' => 'calendar.create', 'label' => 'Create Clinic Event'],
-                ['name' => 'calendar.update', 'label' => 'Update Clinic Event'],
-                ['name' => 'calendar.delete', 'label' => 'Delete Clinic Event'],
-                ['name' => 'calendar.block', 'label' => 'Block Unavailable Schedule'],
-            ],
             'Reports' => [
                 ['name' => 'reports.view', 'label' => 'View Reports'],
                 ['name' => 'reports.export', 'label' => 'Export Reports'],
@@ -113,6 +106,12 @@ class RolesAndPermissionsSeeder extends Seeder
      */
     public function run(): void
     {
+        // The Clinic Calendar module was removed.
+        Permission::where('name', 'like', 'calendar.%')->each(function (Permission $permission) {
+            $permission->roles()->detach();
+            $permission->delete();
+        });
+
         // Create/refresh the permission catalog.
         $allNames = [];
         foreach ($this->catalog() as $module => $permissions) {
