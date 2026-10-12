@@ -250,11 +250,11 @@ class AuthTest extends TestCase
             ->assertJsonPath('user.role', 'student');
     }
 
-    public function test_forgot_password_returns_acknowledgement(): void
+    public function test_forgot_password_reports_unknown_email(): void
     {
         $this->postJson('/api/forgot-password', [
             'email' => 'nonexistent@tmc.edu.ph',
-        ])->assertOk()
-          ->assertJsonStructure(['message']);
+        ])->assertUnprocessable()
+          ->assertJsonValidationErrors('email');
     }
 }

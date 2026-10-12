@@ -461,6 +461,7 @@ class AppointmentController extends Controller
                 $staffUser->name,
                 null,
                 $appointment->id,
+                enforceBookingWindow: false,
             )) {
                 return $conflict;
             }
@@ -603,8 +604,9 @@ class AppointmentController extends Controller
         ?string $patientId,
         ?int $ignoreAppointmentId = null,
         bool $enforceDailyLimit = false,
+        bool $enforceBookingWindow = true,
     ): ?JsonResponse {
-        $message = $this->scheduler->conflict($date, $time, $staffId, $staffName, $patientId, $ignoreAppointmentId, $enforceDailyLimit);
+        $message = $this->scheduler->conflict($date, $time, $staffId, $staffName, $patientId, $ignoreAppointmentId, $enforceDailyLimit, $enforceBookingWindow);
 
         return $message ? response()->json(['message' => $message], 422) : null;
     }

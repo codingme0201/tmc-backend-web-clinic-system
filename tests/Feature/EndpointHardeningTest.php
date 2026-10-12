@@ -11,7 +11,6 @@ use App\Models\Role;
 use App\Models\SystemSetting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
@@ -254,38 +253,56 @@ class EndpointHardeningTest extends TestCase
 
     // --- Password reset ---------------------------------------------------------------
 
-    public function test_password_reset_with_emailed_code(): void
+    public function test_student_can_reset_password_with_matching_email(): void
     {
         $user = $this->student();
         $user->createToken('old');
 
-        $this->postJson('/api/forgot-password', ['email' => $user->email])->assertOk();
-        $this->assertDatabaseHas('password_reset_tokens', ['email' => $user->email]);
-
-        // Replace the random code with a known one to complete the flow.
-        DB::table('password_reset_tokens')->where('email', $user->email)->update(['token' => Hash::make('123456')]);
+        $this->postJson('/api/forgot-password', ['email' => $user->email])
+            ->assertOk()
+            ->assertJsonPath('message', 'Account found. You can now set a new password.');
 
         $this->postJson('/api/reset-password', [
-            'email' => $user->email, 'code' => '000000',
-            'password' => 'brandnew123', 'password_confirmation' => 'brandnew123',
-        ])->assertUnprocessable();
+            'email' => $user->email,
+            'password' => 'brandnew123', 'password_confirmation' => 'mismatch123',
+        ])->assertUnprocessable()->assertJsonValidationErrors('password');
 
         $this->postJson('/api/reset-password', [
-            'email' => $user->email, 'code' => '123456',
+            'email' => $user->email,
             'password' => 'brandnew123', 'password_confirmation' => 'brandnew123',
         ])->assertOk();
 
         $this->assertTrue(Hash::check('brandnew123', $user->fresh()->password));
         $this->assertSame(0, $user->tokens()->count());
-        $this->assertDatabaseMissing('password_reset_tokens', ['email' => $user->email]);
     }
 
-    public function test_forgot_password_response_does_not_reveal_unknown_emails(): void
+    public function test_forgot_password_rejects_unknown_emails(): void
     {
         $this->postJson('/api/forgot-password', ['email' => 'nobody@example.com'])
-            ->assertOk()
-            ->assertJsonPath('message', 'If an account exists with this email address, a password reset code has been sent.');
-        $this->assertDatabaseCount('password_reset_tokens', 0);
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('email');
+
+        $this->postJson('/api/reset-password', [
+            'email' => 'nobody@example.com',
+            'password' => 'brandnew123', 'password_confirmation' => 'brandnew123',
+        ])->assertUnprocessable()->assertJsonValidationErrors('email');
+    }
+
+    public function test_staff_and_inactive_accounts_cannot_use_email_only_reset(): void
+    {
+        $admin = $this->staff();
+        $inactive = $this->student();
+        $inactive->update(['status' => 'inactive']);
+
+        foreach ([$admin, $inactive] as $user) {
+            $this->postJson('/api/forgot-password', ['email' => $user->email])->assertUnprocessable();
+            $this->postJson('/api/reset-password', [
+                'email' => $user->email,
+                'password' => 'brandnew123', 'password_confirmation' => 'brandnew123',
+            ])->assertUnprocessable();
+
+            $this->assertFalse(Hash::check('brandnew123', $user->fresh()->password));
+        }
     }
 
     // --- Medical records -----------------------------------------------------------------

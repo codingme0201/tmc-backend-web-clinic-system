@@ -10,11 +10,7 @@ use App\Models\User;
 use App\Support\AcademicPrograms;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rules\Password;
 use Laravel\Sanctum\PersonalAccessToken;
 
@@ -236,11 +232,11 @@ class AuthController extends Controller
     }
 
     /**
-     * Email a 6-digit password reset code.
+     * Check that an email belongs to an active mobile (student/patient) account
+     * before the app shows the "set a new password" step.
      *
-     * A short code (instead of a link) works for both the mobile app and the
-     * web portal. Only its hash is stored in password_reset_tokens, and the
-     * response is identical whether or not the email exists.
+     * Staff accounts are excluded: they are reset by an administrator from the
+     * web User Management page.
      */
     public function forgotPassword(Request $request): JsonResponse
     {
@@ -248,85 +244,58 @@ class AuthController extends Controller
             'email' => ['required', 'string', 'email'],
         ]);
 
-        $user = User::where('email', $validated['email'])->first();
-
-        if ($user && $user->status === 'active') {
-            $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-
-            DB::table('password_reset_tokens')->updateOrInsert(
-                ['email' => $user->email],
-                ['token' => Hash::make($code), 'created_at' => now()],
-            );
-            Cache::forget($this->resetAttemptsKey($user->email));
-
-            try {
-                Mail::raw(
-                    "Your TMC CareLink password reset code is {$code}.\n\n"
-                    .'It expires in '.self::RESET_CODE_TTL_MINUTES." minutes. If you did not request this, you can ignore this email.",
-                    fn ($message) => $message->to($user->email)->subject('TMC CareLink password reset code'),
-                );
-            } catch (\Throwable $e) {
-                Log::error('Failed to send password reset code.', ['email' => $user->email, 'error' => $e->getMessage()]);
-            }
+        if (! $this->findResettableUser($validated['email'])) {
+            return $this->noResettableAccount();
         }
 
         return response()->json([
-            'message' => 'If an account exists with this email address, a password reset code has been sent.',
+            'message' => 'Account found. You can now set a new password.',
         ]);
     }
 
     /**
-     * Reset a password with the emailed code.
+     * Set a new password for a mobile account identified by email.
      *
-     * Codes expire after RESET_CODE_TTL_MINUTES and are invalidated after
-     * RESET_MAX_ATTEMPTS wrong guesses. All of the user's tokens are revoked.
+     * All of the user's existing tokens are revoked.
      */
     public function resetPassword(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'email' => ['required', 'string', 'email'],
-            'code' => ['required', 'string', 'size:6'],
             'password' => ['required', 'string', Password::min(8), 'confirmed'],
         ]);
 
-        $invalid = fn () => response()->json([
-            'message' => 'The reset code is invalid or has expired.',
-            'errors' => ['code' => ['The reset code is invalid or has expired.']],
-        ], 422);
-
-        $row = DB::table('password_reset_tokens')->where('email', $validated['email'])->first();
-        $user = User::where('email', $validated['email'])->first();
-
-        if (! $row || ! $user || now()->diffInMinutes($row->created_at, true) > self::RESET_CODE_TTL_MINUTES) {
-            return $invalid();
-        }
-
-        if (! Hash::check($validated['code'], $row->token)) {
-            $attemptsKey = $this->resetAttemptsKey($user->email);
-            $attempts = Cache::increment($attemptsKey);
-            if ($attempts >= self::RESET_MAX_ATTEMPTS) {
-                DB::table('password_reset_tokens')->where('email', $user->email)->delete();
-                Cache::forget($attemptsKey);
-            }
-
-            return $invalid();
+        $user = $this->findResettableUser($validated['email']);
+        if (! $user) {
+            return $this->noResettableAccount();
         }
 
         $user->update(['password' => $validated['password']]);
         $user->tokens()->delete();
-        DB::table('password_reset_tokens')->where('email', $user->email)->delete();
-        Cache::forget($this->resetAttemptsKey($user->email));
+        ActivityLog::record($user, 'Reset password from the mobile app', 'System');
 
         return response()->json(['message' => 'Your password has been reset. You can now log in.']);
     }
 
-    private const RESET_CODE_TTL_MINUTES = 30;
-
-    private const RESET_MAX_ATTEMPTS = 5;
-
-    private function resetAttemptsKey(string $email): string
+    private function findResettableUser(string $email): ?User
     {
-        return 'password-reset-attempts:'.strtolower($email);
+        $user = User::where('email', $email)->first();
+
+        if (! $user || $user->status !== 'active' || ! in_array($user->role?->name, ['student', 'patient'], true)) {
+            return null;
+        }
+
+        return $user;
+    }
+
+    private function noResettableAccount(): JsonResponse
+    {
+        $message = 'No active student account was found with this email address.';
+
+        return response()->json([
+            'message' => $message,
+            'errors' => ['email' => [$message]],
+        ], 422);
     }
 
     /**

@@ -359,4 +359,28 @@ class AppointmentsTest extends TestCase
         $response->assertStatus(422)
             ->assertJsonPath('message', 'The selected doctor/staff (Dr. Mendoza) already has an appointment booked on 2026-08-10 at 09:00 AM.');
     }
+
+    public function test_same_day_booking_closes_after_four_thirty_pm(): void
+    {
+        $this->actingAsUser($this->adminUser());
+        $payload = [
+            'patient' => 'Rica Bautista',
+            'type' => 'Check-up',
+            'reason' => 'Walk-in',
+            'date' => '2026-08-14',
+        ];
+
+        $this->travelTo(now()->setDate(2026, 8, 14)->setTime(14, 10));
+        $this->postJson('/api/appointments', [...$payload, 'time' => '01:30 PM'])->assertUnprocessable();
+        $this->postJson('/api/appointments', [...$payload, 'time' => '02:00 PM'])->assertCreated();
+
+        $this->travelTo(now()->setTime(16, 30));
+        $this->postJson('/api/appointments', [...$payload, 'patient' => 'Ana Cruz', 'time' => '04:30 PM'])->assertCreated();
+
+        $this->travelTo(now()->setTime(16, 31));
+        $this->postJson('/api/appointments', [...$payload, 'patient' => 'Ben Ramos', 'time' => '04:30 PM'])
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'The 04:30 PM slot on 2026-08-14 is no longer available. Same-day appointments can only be booked until 04:30 PM and for times that have not yet passed.');
+        $this->postJson('/api/appointments', [...$payload, 'patient' => 'Ben Ramos', 'date' => '2026-08-15', 'time' => '08:00 AM'])->assertCreated();
+    }
 }

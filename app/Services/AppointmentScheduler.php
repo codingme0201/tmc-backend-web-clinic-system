@@ -27,7 +27,13 @@ class AppointmentScheduler
         ?string $patientId = null,
         ?int $ignoreAppointmentId = null,
         bool $enforceDailyLimit = false,
+        bool $enforceBookingWindow = true,
     ): ?string {
+        if ($enforceBookingWindow && ClinicSchedule::isSlotClosed($date, $time)) {
+            return "The {$time} slot on {$date} is no longer available. Same-day appointments can only be booked until "
+                .ClinicSchedule::BOOKING_CUTOFF.' and for times that have not yet passed.';
+        }
+
         $settings = SystemSetting::getInstance();
 
         if ($enforceDailyLimit && $this->isDayFull($date, $settings, $ignoreAppointmentId)) {
@@ -82,7 +88,7 @@ class AppointmentScheduler
 
         return collect(ClinicSchedule::TIME_SLOTS)->map(function (string $slot) use ($active, $staff, $patientId, $buffer, $isFull, $isPast, $date) {
             $reason = match (true) {
-                $isPast => 'past',
+                $isPast, ClinicSchedule::isSlotClosed($date, $slot) => 'past',
                 $patientId && $active->contains(fn ($a) => $a->patient_id === $patientId && $this->timesOverlap($a->time, $slot, 0)) => 'yours',
                 $staff && $this->isMarkedUnavailable($staff->id, $date, $slot) => 'blocked',
                 $staff && $active->contains(fn ($a) => ($a->staff_id === $staff->id || $a->staff === $staff->name) && $this->timesOverlap($a->time, $slot, $buffer)) => 'booked',

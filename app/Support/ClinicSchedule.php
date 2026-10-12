@@ -2,6 +2,9 @@
 
 namespace App\Support;
 
+use Carbon\CarbonInterface;
+use Illuminate\Support\Carbon;
+
 /**
  * Single source of truth for clinic time settings.
  *
@@ -20,6 +23,11 @@ class ClinicSchedule
     public const LUNCH_END = '01:00 PM';
 
     public const SLOT_MINUTES = 30;
+
+    /**
+     * Same-day booking closes after this time.
+     */
+    public const BOOKING_CUTOFF = '04:30 PM';
 
     /**
      * Bookable patient slots (appointments and consultations).
@@ -96,6 +104,26 @@ class ClinicSchedule
         return $minutes !== null
             && $minutes >= self::toMinutes(self::WORK_START)
             && $minutes <= self::toMinutes(self::WORK_END);
+    }
+
+    /**
+     * Whether a same-day slot can no longer be booked: every slot once the
+     * booking cutoff (4:30 PM) has passed, and slots that have already ended.
+     * Other dates are never closed by this rule.
+     */
+    public static function isSlotClosed(string $date, ?string $time, ?CarbonInterface $now = null): bool
+    {
+        $now ??= now();
+
+        if (Carbon::parse($date)->toDateString() !== $now->toDateString()) {
+            return false;
+        }
+
+        $minutesNow = (int) $now->format('G') * 60 + (int) $now->format('i');
+        $slot = self::toMinutes($time);
+
+        return $minutesNow > self::toMinutes(self::BOOKING_CUTOFF)
+            || ($slot !== null && $slot + self::SLOT_MINUTES <= $minutesNow);
     }
 
     /**
