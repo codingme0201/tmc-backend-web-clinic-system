@@ -36,8 +36,10 @@ class UpdatePrescriptionRequest extends StorePrescriptionRequest
             'medical_record_id' => ['nullable', 'integer', 'exists:medical_records,id'],
             'prescribed_by' => ['nullable', 'string', 'max:255'],
             'prescribed_by_id' => ['nullable', 'integer', function (string $attribute, mixed $value, \Closure $fail) {
-                $prescriber = \App\Models\User::with('role')->find($value);
-                if (! $prescriber || $prescriber->role?->name !== 'doctor' || $prescriber->status !== 'active') {
+                $prescriber = \App\Models\User::with(['role', 'staffProfile'])->find($value);
+                if ($prescriber?->isCredentialRejected()) {
+                    $fail("{$prescriber->name}'s medical staff application was rejected, so they cannot be selected as the prescriber.");
+                } elseif (! $prescriber || $prescriber->role?->name !== 'doctor' || $prescriber->status !== 'active') {
                     $fail('Select an active doctor as the prescriber.');
                 }
             }],

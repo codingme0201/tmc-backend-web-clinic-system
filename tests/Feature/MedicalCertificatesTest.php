@@ -224,7 +224,7 @@ class MedicalCertificatesTest extends TestCase
             ->assertJsonPath('data.patient', 'Rica Bautista')
             ->assertJsonPath('data.consultationId', $consultation->id)
             ->assertJsonPath('data.status', 'Pending')
-            ->assertJsonPath('data.requestedBy', self::ISSUER_NAME)
+            ->assertJsonPath('data.requestedBy', 'Rica Bautista')
             ->assertJsonPath('data.purpose', 'Medical Excuse — Clinic Visit')
             ->assertJsonPath('data.issueDate', now()->toDateString())
             ->assertJsonPath('data.reference', 'MC-2026-001');
@@ -234,8 +234,25 @@ class MedicalCertificatesTest extends TestCase
             'consultation_id' => $consultation->id,
             'reference' => 'MC-2026-001',
             'status' => 'Pending',
-            'requested_by' => self::ISSUER_NAME,
+            'requested_by' => 'Rica Bautista',
         ]);
+        $this->assertDatabaseMissing('medical_certificates', ['requested_by' => self::ISSUER_NAME]);
+    }
+
+    public function test_certificate_requested_on_behalf_of_someone_else_keeps_that_requester(): void
+    {
+        $this->actingAsUser($this->adminUser());
+        $consultation = $this->makeCompletedConsultation(['patient' => 'Rica Bautista', 'patient_id' => '2024-0100']);
+
+        $this->postJson('/api/medical-certificates', [
+            'patient' => 'Rica Bautista',
+            'patient_id' => '2024-0100',
+            'consultation_id' => $consultation->id,
+            'requested_by' => 'Maria Bautista (Parent / Guardian)',
+            'purpose' => 'Excuse for missed classes',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.requestedBy', 'Maria Bautista (Parent / Guardian)');
     }
 
     public function test_store_rejects_missing_or_uncompleted_consultation(): void

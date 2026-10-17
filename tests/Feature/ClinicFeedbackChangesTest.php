@@ -182,7 +182,7 @@ class ClinicFeedbackChangesTest extends TestCase
         $this->actingAs($student, 'sanctum')
             ->putJson('/api/me/profile', [
                 'firstName' => 'Age', 'lastName' => 'Student', 'age' => 20,
-                'address' => 'Tagum Norte', 'emergencyContactName' => 'Mom', 'emergencyContactPhone' => '0917',
+                'address' => 'Tagum Norte', 'emergencyContactName' => 'Mom', 'emergencyContactPhone' => '0917-123-4567',
             ])->assertOk();
 
         $this->getJson('/api/me/medical-records')
@@ -236,9 +236,13 @@ class ClinicFeedbackChangesTest extends TestCase
         $this->putJson("/api/roles/{$adminRole->id}/permissions", ['permissions' => [$reports->id]])->assertStatus(409);
         $this->assertTrue($adminRole->permissions()->where('name', 'roles.view')->exists());
 
-        $this->putJson("/api/roles/{$doctorRole->id}/permissions", ['permissions' => [$reports->id, $audit->id]])->assertOk();
-        $this->assertTrue($doctorRole->permissions()->where('name', 'reports.view')->exists());
+        $this->putJson("/api/roles/{$doctorRole->id}/permissions", ['permissions' => [$reports->id, $audit->id]])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['permissions']);
         $this->assertFalse($doctorRole->permissions()->where('name', 'audit_logs.view')->exists());
+
+        $this->putJson("/api/roles/{$doctorRole->id}/permissions", ['permissions' => [$reports->id]])->assertOk();
+        $this->assertTrue($doctorRole->permissions()->where('name', 'reports.view')->exists());
     }
 
     // --- Audit logs ---------------------------------------------------------------------------

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Support\ClinicDepartments;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -92,17 +93,40 @@ class User extends Authenticatable
     }
 
     /**
-     * Active doctor/nurse accounts that can be assigned to patients.
+     * Active doctor/nurse accounts that can be assigned to patients. Staff
+     * whose credential application was rejected are never assignable.
      */
     public function scopeClinicians(Builder $query): Builder
     {
         return $query->where('status', 'active')
-            ->whereHas('role', fn ($q) => $q->whereIn('name', self::CLINICIAN_ROLES));
+            ->whereHas('role', fn ($q) => $q->whereIn('name', self::CLINICIAN_ROLES))
+            ->whereDoesntHave('staffProfile', fn ($q) => $q->where('credential_status', 'Rejected'));
+    }
+
+    /**
+     * Assignable doctors only (the "Assign Doctor" pickers).
+     */
+    public function scopeAssignableDoctors(Builder $query): Builder
+    {
+        return $query->clinicians()->whereHas('role', fn ($q) => $q->where('name', 'doctor'));
     }
 
     public function isClinician(): bool
     {
         return in_array($this->role?->name, self::CLINICIAN_ROLES, true);
+    }
+
+    public function isCredentialRejected(): bool
+    {
+        return $this->staffProfile?->credential_status === 'Rejected';
+    }
+
+    /**
+     * Clinical department this doctor/nurse serves (see ClinicDepartments).
+     */
+    public function clinicalDepartment(): string
+    {
+        return ClinicDepartments::forStaff($this->staffProfile);
     }
 
     public function isAdmin(): bool

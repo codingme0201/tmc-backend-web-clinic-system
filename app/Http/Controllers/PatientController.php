@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\PhoneNumber;
 use App\Http\Requests\UpdatePatientStatusRequest;
 use App\Http\Resources\AppointmentResource;
 use App\Http\Resources\MedicalCertificateResource;
@@ -76,12 +77,12 @@ class PatientController extends Controller
             'block' => ['nullable', 'string', 'max:50'],
             'address' => ['nullable', 'string', 'max:500'],
             'nationality' => ['nullable', 'string', 'max:100'],
-            'contact' => ['nullable', 'string', 'max:50'],
-            'phone' => ['nullable', 'string', 'max:50'],
+            'contact' => PhoneNumber::rules(),
+            'phone' => PhoneNumber::rules(),
             'emergencyContactName' => ['nullable', 'string', 'max:150'],
             'emergency_contact_name' => ['nullable', 'string', 'max:150'],
-            'emergencyContactPhone' => ['nullable', 'string', 'max:50'],
-            'emergency_contact_phone' => ['nullable', 'string', 'max:50'],
+            'emergencyContactPhone' => PhoneNumber::rules(),
+            'emergency_contact_phone' => PhoneNumber::rules(),
             'emergencyContact' => ['nullable', 'string', 'max:255'],
         ]);
 
@@ -200,7 +201,7 @@ class PatientController extends Controller
             $query->where('status', $status);
         }
 
-        return PatientResource::collection($query->orderBy('name')->get());
+        return PatientResource::collection($query->orderBy('patient_id')->orderBy('id')->get());
     }
 
     /**
@@ -344,7 +345,7 @@ class PatientController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'type' => ['required', 'string', 'max:255'],
             'courseDept' => ['nullable', 'string', 'max:255', AcademicPrograms::rule()],
-            'contact' => ['nullable', 'string', 'max:255'],
+            'contact' => PhoneNumber::rules(),
             'emergencyContact' => ['nullable', 'string', 'max:255'],
             'allergies' => ['nullable', 'string', 'max:255'],
             'history' => ['nullable', 'string', 'max:255'],
@@ -390,9 +391,9 @@ class PatientController extends Controller
             'block' => ['nullable', 'string', 'max:50'],
             'address' => ['nullable', 'string', 'max:500'],
             'nationality' => ['nullable', 'string', 'max:100'],
-            'contact' => ['nullable', 'string', 'max:255'],
+            'contact' => PhoneNumber::rules(),
             'emergencyContactName' => ['nullable', 'string', 'max:150'],
-            'emergencyContactPhone' => ['nullable', 'string', 'max:50'],
+            'emergencyContactPhone' => PhoneNumber::rules(),
             'emergencyContact' => ['nullable', 'string', 'max:255'],
             'allergies' => ['nullable', 'string', 'max:255'],
             'history' => ['nullable', 'string', 'max:255'],

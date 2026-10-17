@@ -78,6 +78,7 @@ class ClinicStaffController extends Controller
             ->orderBy('start_time')])
             ->where('status', 'active')
             ->whereHas('role', fn ($q) => $q->whereIn('name', User::PROFILE_SELF_EDIT_ROLES))
+            ->whereDoesntHave('staffProfile', fn ($q) => $q->where('credential_status', 'Rejected'))
             ->orderBy('name')
             ->get();
 
@@ -86,8 +87,8 @@ class ClinicStaffController extends Controller
 
     public function publicShow(User $user): JsonResponse
     {
-        $user->loadMissing('role');
-        if ($user->status !== 'active' || ! in_array($user->role?->name, User::PROFILE_SELF_EDIT_ROLES, true)) {
+        $user->loadMissing(['role', 'staffProfile']);
+        if ($user->status !== 'active' || $user->isCredentialRejected() || ! in_array($user->role?->name, User::PROFILE_SELF_EDIT_ROLES, true)) {
             abort(404, 'Medical staff member not found.');
         }
 
@@ -114,6 +115,7 @@ class ClinicStaffController extends Controller
             'position' => $profile?->position ?? '',
             'specialty' => $profile?->specialization ?: ($user->role?->name === 'nurse' ? 'Nursing Services' : 'General Medicine'),
             'specialization' => $profile?->specialization ?? '',
+            'department' => $user->clinicalDepartment(),
             'background' => $profile?->background ?? '',
             'contactNumber' => $profile?->contact_number ?? '',
             'email' => $user->email,

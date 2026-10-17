@@ -6,6 +6,7 @@ use App\Models\Appointment;
 use App\Models\StaffSchedule;
 use App\Models\SystemSetting;
 use App\Models\User;
+use App\Support\ClinicDepartments;
 use App\Support\ClinicSchedule;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -106,6 +107,34 @@ class AppointmentScheduler
     public function clinicians(): Builder
     {
         return User::clinicians();
+    }
+
+    /**
+     * Why the clinician cannot take a visit of the given service type, or
+     * null when they can: the account must be an active, non-rejected
+     * doctor (or nurse when allowed) from the visit's department.
+     */
+    public function staffAssignmentError(?User $staff, ?string $type, bool $doctorsOnly = false): ?string
+    {
+        $eligible = $staff
+            ? ($doctorsOnly ? User::assignableDoctors() : User::clinicians())->whereKey($staff->id)->exists()
+            : false;
+
+        if (! $eligible) {
+            if ($staff?->isCredentialRejected()) {
+                return "{$staff->name}'s medical staff application was rejected, so they cannot be assigned to patients.";
+            }
+
+            return $doctorsOnly ? 'Please select an active doctor.' : 'Please select an active doctor or nurse.';
+        }
+
+        $required = ClinicDepartments::forType($type);
+        $department = $staff->clinicalDepartment();
+        if ($type !== null && $department !== $required) {
+            return "{$staff->name} belongs to the {$department} department and cannot be assigned to a {$required} visit ({$type}).";
+        }
+
+        return null;
     }
 
     /**

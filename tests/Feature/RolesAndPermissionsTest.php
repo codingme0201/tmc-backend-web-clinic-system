@@ -120,17 +120,17 @@ class RolesAndPermissionsTest extends TestCase
         $this->actingAsUser($admin);
 
         $response = $this->postJson('/api/roles', [
-            'name' => 'front-desk',
+            'name' => 'pharmacist',
             'description' => 'Front desk staff',
             'permissions' => $permissionIds,
         ]);
 
         $response->assertCreated()
-            ->assertJsonPath('data.name', 'front-desk')
+            ->assertJsonPath('data.name', 'pharmacist')
             ->assertJsonCount(2, 'data.permissions');
 
-        $this->assertDatabaseHas('roles', ['name' => 'front-desk']);
-        $role = Role::where('name', 'front-desk')->firstOrFail();
+        $this->assertDatabaseHas('roles', ['name' => 'pharmacist']);
+        $role = Role::where('name', 'pharmacist')->firstOrFail();
         $this->assertSame($permissionIds, $role->permissions->pluck('id')->all());
     }
 

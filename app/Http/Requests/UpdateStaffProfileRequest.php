@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\PhoneNumber;
 use App\Models\StaffProfile;
 use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -46,7 +47,7 @@ class UpdateStaffProfileRequest extends FormRequest
             'position' => ['nullable', 'string', 'max:150'],
             'specialization' => ['nullable', 'string', 'max:150'],
             'background' => ['nullable', 'string', 'max:3000'],
-            'contactNumber' => ['nullable', 'string', 'max:50'],
+            'contactNumber' => PhoneNumber::rules(),
             'licenseType' => ['nullable', 'required_with:licenseNumber', 'string', Rule::in(StaffProfile::LICENSE_TYPES)],
             'licenseNumber' => [
                 'nullable', 'required_with:licenseType', 'string', 'max:50',

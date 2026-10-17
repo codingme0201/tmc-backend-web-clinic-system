@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'reference', 'date', 'time', 'patient', 'patient_id', 'appointment_id', 'staff_id', 'staff', 'status',
-    'visit_type', 'previous_consultation_id',
+    'visit_type', 'type', 'previous_consultation_id',
     'chief_complaint', 'vitals', 'clinical_findings', 'diagnosis', 'treatment',
     'disposition', 'follow_up_required', 'follow_up_date', 'follow_up_notes', 'follow_up_appointment_id',
     'started_at', 'completed_at',

@@ -13,6 +13,7 @@ use App\Models\Notification;
 use App\Models\SystemSetting;
 use App\Models\User;
 use App\Services\AppointmentScheduler;
+use App\Support\ClinicDepartments;
 use Illuminate\Http\JsonResponse;
 use App\Support\SyncState;
 use Illuminate\Http\Request;
@@ -81,11 +82,11 @@ class AppointmentController extends Controller
         // field is kept for older app builds.
         $staffUser = null;
         if (! empty($validated['staff_id'])) {
-            $staffUser = $this->scheduler->clinicians()->find($validated['staff_id']);
-            if (! $staffUser) {
+            $staffUser = User::with(['role', 'staffProfile'])->find($validated['staff_id']);
+            if ($message = $this->scheduler->staffAssignmentError($staffUser, $validated['type'])) {
                 return response()->json([
-                    'message' => 'The selected doctor/nurse is not available for booking.',
-                    'errors' => ['staff_id' => ['The selected doctor/nurse is invalid.']],
+                    'message' => $message,
+                    'errors' => ['staff_id' => [$message]],
                 ], 422);
             }
         } elseif (! empty($validated['staff'])) {
@@ -142,9 +143,16 @@ class AppointmentController extends Controller
                 'types' => Appointment::TYPES,
                 'visitTypes' => Appointment::VISIT_TYPES,
                 'timeSlots' => Appointment::TIME_SLOTS,
-                'doctors' => $this->scheduler->clinicians()->with('role')->orderBy('name')->get()
-                    ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name, 'role' => $u->role?->name])
+                'doctors' => $this->scheduler->clinicians()->with(['role', 'staffProfile'])->orderBy('name')->get()
+                    ->map(fn (User $u) => [
+                        'id' => $u->id,
+                        'name' => $u->name,
+                        'role' => $u->role?->name,
+                        'department' => $u->clinicalDepartment(),
+                    ])
                     ->values(),
+                'departmentByType' => collect(Appointment::TYPES)
+                    ->mapWithKeys(fn (string $type) => [$type => ClinicDepartments::forType($type)]),
                 'onlineAppointmentsEnabled' => (bool) $settings->online_appointments_enabled,
             ],
         ]);
@@ -378,9 +386,9 @@ class AppointmentController extends Controller
 
         $staffUser = null;
         if (! empty($validated['staff_id'])) {
-            $staffUser = $this->scheduler->clinicians()->find($validated['staff_id']);
-            if (! $staffUser) {
-                return $this->invalidStaffResponse();
+            $staffUser = User::with(['role', 'staffProfile'])->find($validated['staff_id']);
+            if ($message = $this->scheduler->staffAssignmentError($staffUser, $validated['type'], doctorsOnly: true)) {
+                return $this->invalidStaffResponse($message);
             }
         } elseif (! empty($validated['staff'])) {
             $staffUser = User::where('name', $validated['staff'])->first();
@@ -449,9 +457,9 @@ class AppointmentController extends Controller
         $staffUser = null;
 
         if ($staffId) {
-            $staffUser = $this->scheduler->clinicians()->find($staffId);
-            if (! $staffUser) {
-                return $this->invalidStaffResponse();
+            $staffUser = User::with(['role', 'staffProfile'])->find($staffId);
+            if ($message = $this->scheduler->staffAssignmentError($staffUser, $appointment->type, doctorsOnly: true)) {
+                return $this->invalidStaffResponse($message);
             }
 
             if ($conflict = $this->conflictResponse(
@@ -611,11 +619,11 @@ class AppointmentController extends Controller
         return $message ? response()->json(['message' => $message], 422) : null;
     }
 
-    private function invalidStaffResponse(): JsonResponse
+    private function invalidStaffResponse(string $message): JsonResponse
     {
         return response()->json([
-            'message' => 'The selected doctor/nurse is not an active clinician.',
-            'errors' => ['staff_id' => ['Please select an active doctor or nurse.']],
+            'message' => $message,
+            'errors' => ['staff_id' => [$message]],
         ], 422);
     }
 

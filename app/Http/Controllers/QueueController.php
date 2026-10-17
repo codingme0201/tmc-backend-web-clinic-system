@@ -141,7 +141,7 @@ class QueueController extends Controller
         $user = $request->user();
 
         $consultation = DB::transaction(function () use ($appointment, $user) {
-            if (! $appointment->staff_id && $user->isClinician()) {
+            if (! $appointment->staff_id && $user->isClinician() && ! $user->isCredentialRejected()) {
                 $appointment->update(['staff_id' => $user->id, 'staff' => $user->name]);
             }
 
@@ -156,6 +156,7 @@ class QueueController extends Controller
                 'staff' => $appointment->staff ?? '',
                 'status' => 'In Progress',
                 'visit_type' => $appointment->visit_type ?? Appointment::VISIT_NEW,
+                'type' => $appointment->type,
                 'previous_consultation_id' => $appointment->previous_consultation_id,
                 'chief_complaint' => $appointment->reason,
                 'vitals' => [

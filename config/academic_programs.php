@@ -13,7 +13,7 @@
 */
 
 return [
-    'College of Computing Studies' => [
+    'College of Computer Studies' => [
         'Bachelor of Science in Information Technology',
     ],
     'College of Criminal Justice Education' => [

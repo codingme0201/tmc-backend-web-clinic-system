@@ -201,6 +201,21 @@ class PrescriptionController extends Controller
     }
 
     /**
+     * Remove a prescription and its medication lines.
+     */
+    public function destroy(Prescription $prescription): JsonResponse
+    {
+        $reference = $prescription->reference;
+
+        DB::transaction(function () use ($prescription) {
+            $prescription->medications()->delete();
+            $prescription->delete();
+        });
+
+        return response()->json(['message' => "Prescription {$reference} removed."]);
+    }
+
+    /**
      * The prescribing doctor: the selected doctor account, else a matching
      * name (older clients), else the signed-in user.
      *

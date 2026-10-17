@@ -150,6 +150,11 @@ class ConsultationController extends Controller
         // Status defaults to 'Scheduled' unless explicitly specified or already has diagnosis
         $status = $validated['status'] ?? (! empty($validated['diagnosis']) ? 'Completed' : 'Scheduled');
 
+        $type = $validated['type'] ?? $appointment?->type ?? 'Check-up';
+        if (! empty($validated['staff_id']) && ($error = $this->staffErrorResponse($validated['staff_id'], $type))) {
+            return $error;
+        }
+
         $staffUser = $this->resolveStaff($validated['staff_id'] ?? null, $validated['staff'] ?? null)
             ?? $appointment?->staffUser;
         $staffName = $staffUser?->name ?? ($validated['staff'] ?? ($appointment?->staff ?? ''));
@@ -159,7 +164,7 @@ class ConsultationController extends Controller
             ?? $appointment?->visit_type
             ?? ($previousId ? Appointment::VISIT_FOLLOW_UP : Appointment::VISIT_NEW);
 
-        $consultation = DB::transaction(function () use ($validated, $today, $nowTime, $vitals, $status, $staffUser, $staffName, $appointment, $previousId, $visitType) {
+        $consultation = DB::transaction(function () use ($validated, $today, $nowTime, $vitals, $status, $staffUser, $staffName, $appointment, $previousId, $visitType, $type) {
             $patientId = $validated['patient_id'] ?? $appointment?->patient_id ?? Patient::where('name', $validated['patient'])->value('patient_id');
             $stamp = "$today $nowTime";
 
@@ -174,6 +179,7 @@ class ConsultationController extends Controller
                 'staff' => $staffName,
                 'status' => $status,
                 'visit_type' => $visitType,
+                'type' => $type,
                 'previous_consultation_id' => $previousId,
                 'chief_complaint' => $validated['chiefComplaint'] ?? $validated['symptoms'] ?? $appointment?->reason ?? '',
                 'vitals' => $vitals,
@@ -221,6 +227,9 @@ class ConsultationController extends Controller
         }
 
         $validated = $request->validated();
+        if ($error = $this->changedStaffError($consultation, $validated)) {
+            return $error;
+        }
 
         $consultation->update([
             ...$this->staffAttributes($consultation, $validated),
@@ -260,6 +269,9 @@ class ConsultationController extends Controller
         }
 
         $validated = $request->validated();
+        if ($error = $this->changedStaffError($consultation, $validated)) {
+            return $error;
+        }
         $followUpRequired = (bool) ($validated['followUpRequired'] ?? false);
         $staffAttributes = $this->staffAttributes($consultation, $validated);
 
@@ -326,6 +338,9 @@ class ConsultationController extends Controller
         }
 
         $validated = $request->validated();
+        if (! empty($validated['staff_id']) && ($error = $this->staffErrorResponse($validated['staff_id'], $consultation->type))) {
+            return $error;
+        }
         $staffUser = $this->resolveStaff($validated['staff_id'] ?? null, null) ?? $consultation->staffUser;
 
         if ($message = $this->scheduler->conflict(
@@ -435,6 +450,28 @@ class ConsultationController extends Controller
         }
 
         return ['staff_id' => $consultation->staff_id, 'staff' => $consultation->staff];
+    }
+
+    /**
+     * Reject a newly selected attending clinician who is not an active,
+     * non-rejected doctor/nurse of the consultation's department.
+     */
+    private function changedStaffError(Consultation $consultation, array $validated): ?JsonResponse
+    {
+        $staffId = $validated['staff_id'] ?? null;
+        if (! $staffId || (int) $staffId === (int) $consultation->staff_id) {
+            return null;
+        }
+
+        return $this->staffErrorResponse($staffId, $consultation->type);
+    }
+
+    private function staffErrorResponse(int $staffId, ?string $type): ?JsonResponse
+    {
+        $staff = User::with(['role', 'staffProfile'])->find($staffId);
+        $message = $this->scheduler->staffAssignmentError($staff, $type ?? 'Check-up');
+
+        return $message ? response()->json(['message' => $message, 'errors' => ['staff_id' => [$message]]], 422) : null;
     }
 
     private function resolveStaff(?int $staffId, ?string $staffName): ?User

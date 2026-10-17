@@ -194,6 +194,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/prescriptions', [PrescriptionController::class, 'store'])->middleware('permission:prescriptions.create');
     Route::patch('/prescriptions/{prescription}', [PrescriptionController::class, 'update'])->middleware('permission:prescriptions.update');
+    Route::delete('/prescriptions/{prescription}', [PrescriptionController::class, 'destroy'])->middleware('permission:prescriptions.delete');
 
     // Dashboard insights (activity bars + peak hours)
     Route::get('/insights/activity', [ClinicInsightsController::class, 'activity'])->middleware('permission:dashboard.view');

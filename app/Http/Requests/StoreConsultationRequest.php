@@ -59,6 +59,7 @@ class StoreConsultationRequest extends FormRequest
             'staff' => ['nullable', 'string', 'max:255'],
             'staff_id' => ['nullable', 'integer', 'exists:users,id'],
             'visit_type' => ['nullable', 'string', Rule::in(Appointment::VISIT_TYPES)],
+            'type' => ['nullable', 'string', Rule::in(Appointment::TYPES)],
             'previous_consultation_id' => ['nullable', 'integer', 'exists:consultations,id'],
             'symptoms' => ['nullable', 'string'],
             'vitals' => ['nullable', 'array'],

@@ -137,10 +137,15 @@ class StaffScheduleController extends Controller
         $validated = $request->validated();
 
         // Verify the user is eligible (doctor or nurse)
-        $user = User::with('role')->findOrFail($validated['user_id']);
+        $user = User::with(['role', 'staffProfile'])->findOrFail($validated['user_id']);
         if (! $user->isClinician()) {
             return response()->json([
                 'message' => 'Only doctors and nurses can be assigned schedules.',
+            ], 422);
+        }
+        if ($user->isCredentialRejected()) {
+            return response()->json([
+                'message' => "{$user->name}'s medical staff application was rejected, so they cannot be scheduled.",
             ], 422);
         }
 
@@ -193,9 +198,12 @@ class StaffScheduleController extends Controller
         // If user changed, verify they are eligible
         $userId = $validated['user_id'] ?? $schedule->user_id;
         if (isset($validated['user_id']) && $validated['user_id'] !== $schedule->user_id) {
-            $user = User::with('role')->findOrFail($userId);
+            $user = User::with(['role', 'staffProfile'])->findOrFail($userId);
             if (! $user->isClinician()) {
                 abort(422, 'Only doctors and nurses can be assigned schedules.');
+            }
+            if ($user->isCredentialRejected()) {
+                abort(422, "{$user->name}'s medical staff application was rejected, so they cannot be scheduled.");
             }
         }
 

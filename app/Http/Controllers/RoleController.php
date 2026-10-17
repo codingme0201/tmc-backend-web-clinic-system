@@ -9,6 +9,7 @@ use App\Http\Resources\RoleResource;
 use App\Models\ActivityLog;
 use App\Models\Permission;
 use App\Models\Role;
+use App\Support\RolePermissions;
 use App\Support\SyncState;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,10 +24,6 @@ class RoleController extends Controller
      */
     private const LOCKED_ROLES = ['admin', 'student'];
 
-    /**
-     * Permissions that only the administrator may hold.
-     */
-    private const ADMIN_ONLY_PERMISSIONS = ['audit_logs.view'];
 
     /**
      * List all roles with permission and user counts.
@@ -46,9 +43,13 @@ class RoleController extends Controller
      */
     public function store(StoreRoleRequest $request): JsonResponse
     {
+        if ($denied = $this->adminLevelResponse($request->validated('permissions', []))) {
+            return $denied;
+        }
+
         $role = DB::transaction(function () use ($request) {
             $role = Role::create($request->safe(['name', 'description']));
-            $role->permissions()->sync($this->withoutAdminOnly($request->validated('permissions', [])));
+            $role->permissions()->sync($request->validated('permissions', []));
 
             return $role;
         });
@@ -81,12 +82,18 @@ class RoleController extends Controller
         if ($role->name === 'admin' && $request->filled('name') && $request->input('name') !== 'admin') {
             return response()->json(['message' => 'The admin role cannot be renamed.'], 409);
         }
+        if ($role->is_system && $request->filled('name') && $request->input('name') !== $role->name) {
+            return response()->json(['message' => "The {$role->name} role is predefined and cannot be renamed."], 409);
+        }
+        if ($request->has('permissions') && ($denied = $this->adminLevelResponse($request->validated('permissions')))) {
+            return $denied;
+        }
 
         $role = DB::transaction(function () use ($request, $role) {
             $role->update($request->safe(['name', 'description']));
 
             if ($request->has('permissions')) {
-                $role->permissions()->sync($this->withoutAdminOnly($request->validated('permissions')));
+                $role->permissions()->sync($request->validated('permissions'));
             }
 
             return $role;
@@ -131,8 +138,11 @@ class RoleController extends Controller
         if ($locked = $this->lockedResponse($role)) {
             return $locked;
         }
+        if ($denied = $this->adminLevelResponse($request->validated('permissions'))) {
+            return $denied;
+        }
 
-        $role->permissions()->sync($this->withoutAdminOnly($request->validated('permissions')));
+        $role->permissions()->sync($request->validated('permissions'));
         SyncState::bump('roles');
         ActivityLog::record($request->user(), "Updated permissions of role {$role->name}", 'Roles & Permissions');
 
@@ -153,13 +163,23 @@ class RoleController extends Controller
     }
 
     /**
+     * Administrative permissions belong to the administrator role only, so
+     * no other role can be turned into a second administrator.
+     *
      * @param  array<int, int|string>  $permissionIds
-     * @return array<int, int|string>
      */
-    private function withoutAdminOnly(array $permissionIds): array
+    private function adminLevelResponse(array $permissionIds): ?JsonResponse
     {
-        $adminOnly = Permission::whereIn('name', self::ADMIN_ONLY_PERMISSIONS)->pluck('id')->map(fn ($id) => (string) $id)->all();
+        $labels = Permission::whereIn('id', $permissionIds)
+            ->whereIn('name', RolePermissions::ADMIN_LEVEL_PERMISSIONS)
+            ->pluck('label');
 
-        return array_values(array_filter($permissionIds, fn ($id) => ! in_array((string) $id, $adminOnly, true)));
+        if ($labels->isEmpty()) {
+            return null;
+        }
+
+        $message = 'These permissions are reserved for the Administrator role and cannot be given to other roles: '.$labels->implode(', ').'.';
+
+        return response()->json(['message' => $message, 'errors' => ['permissions' => [$message]]], 422);
     }
 }

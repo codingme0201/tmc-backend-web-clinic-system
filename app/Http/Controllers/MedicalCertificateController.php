@@ -7,6 +7,7 @@ use App\Http\Requests\StoreMedicalCertificateRequest;
 use App\Http\Requests\UpdateMedicalCertificateRequest;
 use App\Http\Resources\MedicalCertificateResource;
 use App\Models\MedicalCertificate;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -159,9 +160,14 @@ class MedicalCertificateController extends Controller
         $validated = $request->validated();
         $issueDate = $validated['issue_date'] ?? now()->toDateString();
 
-        $certificate = DB::transaction(function () use ($request, $validated, $issueDate) {
-            $user = $request->user();
+        // The requester is the person asking for the certificate (by default
+        // the patient), not the staff member encoding the request.
+        $requestedBy = trim((string) ($validated['requested_by'] ?? '')) ?: $validated['patient'];
+        $requesterAccountId = $requestedBy === $validated['patient'] && ! empty($validated['patient_id'])
+            ? User::where('patient_id', $validated['patient_id'])->value('id')
+            : null;
 
+        $certificate = DB::transaction(function () use ($validated, $issueDate, $requestedBy, $requesterAccountId) {
             return MedicalCertificate::create([
                 'reference' => MedicalCertificate::nextReference($issueDate, true),
                 'patient' => $validated['patient'],
@@ -169,11 +175,11 @@ class MedicalCertificateController extends Controller
                 'consultation_id' => $validated['consultation_id'] ?? null,
                 'medical_record_id' => $validated['medical_record_id'] ?? null,
                 'issued_by_id' => null,
-                'requested_by_id' => $user->id,
+                'requested_by_id' => $requesterAccountId,
                 'approved_by_id' => null,
                 'rejected_by_id' => null,
                 'issued_by' => $validated['issued_by'] ?? '',
-                'requested_by' => $validated['requested_by'] ?? $user->name,
+                'requested_by' => $requestedBy,
                 'purpose' => $validated['purpose'],
                 'diagnosis' => $validated['diagnosis'] ?? '',
                 'recommendation' => $validated['recommendation'] ?? '',

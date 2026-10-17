@@ -131,6 +131,7 @@ class ReportController extends Controller
                 'courseDept' => $p->course_dept,
                 'contact' => $p->contact,
                 'status' => $p->status,
+                'registeredOn' => $p->created_at?->format('Y-m-d'),
                 'appointmentsCount' => $p->appointments_count,
                 'consultationsCount' => $p->consultations_count,
                 'medicalCertificatesCount' => $p->medical_certificates_count,
@@ -353,7 +354,14 @@ class ReportController extends Controller
         return response()->json([
             'data' => $data['rows'],
             'columns' => $data['columns'],
+            'dateColumns' => $data['dateColumns'],
             'type' => $type,
+            'meta' => [
+                'startDate' => $validated['start_date'] ?? null,
+                'endDate' => $validated['end_date'] ?? null,
+                'generatedAt' => now()->toIso8601String(),
+                'total' => count($data['rows']),
+            ],
         ]);
     }
 
@@ -442,10 +450,12 @@ class ReportController extends Controller
             'Date' => $a->date instanceof Carbon ? $a->date->format('Y-m-d') : ($a->date ? Carbon::parse($a->date)->format('Y-m-d') : ''),
             'Time' => $a->time,
             'Status' => $a->status,
+            'Requested On' => $a->requested_on?->format('Y-m-d') ?? '',
         ]);
 
         return [
-            'columns' => ['Reference', 'Patient', 'Staff', 'Type', 'Reason', 'Date', 'Time', 'Status'],
+            'columns' => ['Reference', 'Patient', 'Staff', 'Type', 'Reason', 'Date', 'Time', 'Status', 'Requested On'],
+            'dateColumns' => ['Date', 'Requested On'],
             'rows' => $rows,
         ];
     }
@@ -474,10 +484,13 @@ class ReportController extends Controller
             'Chief Complaint' => $c->chief_complaint,
             'Diagnosis' => $c->diagnosis,
             'Treatment' => $c->treatment,
+            'Started At' => $c->started_at ?? '',
+            'Completed At' => $c->completed_at ?? '',
         ]);
 
         return [
-            'columns' => ['Reference', 'Patient', 'Staff', 'Date', 'Time', 'Status', 'Chief Complaint', 'Diagnosis', 'Treatment'],
+            'columns' => ['Reference', 'Patient', 'Staff', 'Date', 'Time', 'Status', 'Chief Complaint', 'Diagnosis', 'Treatment', 'Started At', 'Completed At'],
+            'dateColumns' => ['Date', 'Started At', 'Completed At'],
             'rows' => $rows,
         ];
     }
@@ -501,10 +514,12 @@ class ReportController extends Controller
             'Course/Dept' => $p->course_dept,
             'Contact' => $p->contact,
             'Status' => $p->status,
+            'Registered On' => $p->created_at?->format('Y-m-d') ?? '',
         ]);
 
         return [
-            'columns' => ['Patient ID', 'Name', 'Type', 'Course/Dept', 'Contact', 'Status'],
+            'columns' => ['Patient ID', 'Name', 'Type', 'Course/Dept', 'Contact', 'Status', 'Registered On'],
+            'dateColumns' => ['Registered On'],
             'rows' => $rows,
         ];
     }
@@ -531,10 +546,12 @@ class ReportController extends Controller
             'Issue Date' => $mc->issue_date instanceof Carbon ? $mc->issue_date->format('Y-m-d') : ($mc->issue_date ? Carbon::parse($mc->issue_date)->format('Y-m-d') : ''),
             'Valid Until' => $mc->valid_until instanceof Carbon ? $mc->valid_until->format('Y-m-d') : ($mc->valid_until ? Carbon::parse($mc->valid_until)->format('Y-m-d') : ''),
             'Status' => $mc->status,
+            'Requested By' => $mc->requested_by ?? '',
         ]);
 
         return [
-            'columns' => ['Reference', 'Patient', 'Purpose', 'Diagnosis', 'Issued By', 'Issue Date', 'Valid Until', 'Status'],
+            'columns' => ['Reference', 'Patient', 'Purpose', 'Diagnosis', 'Issued By', 'Issue Date', 'Valid Until', 'Status', 'Requested By'],
+            'dateColumns' => ['Issue Date', 'Valid Until'],
             'rows' => $rows,
         ];
     }
@@ -566,6 +583,7 @@ class ReportController extends Controller
 
         return [
             'columns' => ['Reference', 'Patient', 'Prescribed By', 'Date', 'Medicine', 'Dosage', 'Frequency', 'Duration', 'Instructions'],
+            'dateColumns' => ['Date'],
             'rows' => $rows,
         ];
     }

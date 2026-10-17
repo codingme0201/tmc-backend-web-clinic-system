@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\ClinicDepartments;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -27,6 +28,8 @@ class ConsultationResource extends JsonResource
             'staff' => $this->staff ?? '',
             'status' => $this->status,
             'visitType' => $this->visit_type ?? 'New Consultation',
+            'type' => $this->type ?? 'Check-up',
+            'department' => ClinicDepartments::forType($this->type),
             'isFollowUp' => $this->isFollowUp(),
             'previousConsultationId' => $this->previous_consultation_id,
             'previousConsultation' => $this->whenLoaded('previousConsultation', fn () => $this->previousConsultation ? [

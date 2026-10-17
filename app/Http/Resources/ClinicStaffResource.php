@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use App\Models\Appointment;
 use App\Models\StaffProfile;
+use App\Support\ClinicDepartments;
 use App\Support\ClinicSchedule;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -29,6 +30,7 @@ class ClinicStaffResource extends JsonResource
             'roleDescription' => $this->role?->description,
             'position' => $profile?->position ?? '',
             'specialization' => $profile?->specialization ?? '',
+            'department' => ClinicDepartments::forStaff($profile),
             'background' => $profile?->background ?? '',
             'contactNumber' => $profile?->contact_number ?? '',
             'credentials' => [

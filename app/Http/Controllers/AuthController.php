@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\PhoneNumber;
 use App\Http\Requests\LoginRequest;
 use App\Models\ActivityLog;
 use App\Models\Patient;
@@ -147,12 +148,12 @@ class AuthController extends Controller
             'block' => ['nullable', 'string', 'max:50'],
             'address' => ['nullable', 'string', 'max:500'],
             'nationality' => ['nullable', 'string', 'max:100'],
-            'contact' => ['nullable', 'string', 'max:50'],
-            'phone' => ['nullable', 'string', 'max:50'],
+            'contact' => PhoneNumber::rules(),
+            'phone' => PhoneNumber::rules(),
             'emergency_contact_name' => ['nullable', 'string', 'max:150'],
             'emergencyContactName' => ['nullable', 'string', 'max:150'],
-            'emergency_contact_phone' => ['nullable', 'string', 'max:50'],
-            'emergencyContactPhone' => ['nullable', 'string', 'max:50'],
+            'emergency_contact_phone' => PhoneNumber::rules(),
+            'emergencyContactPhone' => PhoneNumber::rules(),
         ]);
 
         $firstName = $validated['firstName'] ?? $validated['first_name'] ?? null;

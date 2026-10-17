@@ -36,6 +36,7 @@ class UserResource extends JsonResource
                 'specialization' => $this->staffProfile?->specialization ?? '',
                 'licenseType' => $this->staffProfile?->license_type ?? '',
                 'credentialStatus' => $this->staffProfile?->credential_status ?? 'Not Submitted',
+                'department' => $this->clinicalDepartment(),
             ]),
             'patient' => $this->whenLoaded('patient', fn () => [
                 'id' => $this->patient?->id,
