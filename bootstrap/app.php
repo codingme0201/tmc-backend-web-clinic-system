@@ -25,6 +25,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // application/json) still receive 401 responses.
         $middleware->redirectGuestsTo('/login');
 
+        // Trust incoming reverse proxies (such as ngrok) for HTTPS termination,
+        // client IP forwarding, and secure asset/URL generation.
+        $middleware->trustProxies(at: '*');
+
         // Module 2 — role/permission checks, e.g. `permission:roles.create`.
         $middleware->alias([
             'permission' => CheckPermission::class,
