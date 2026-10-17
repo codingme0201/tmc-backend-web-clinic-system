@@ -6,6 +6,7 @@ use App\Http\Resources\ConsultationResource;
 use App\Http\Resources\QueueEntryResource;
 use App\Models\Appointment;
 use App\Models\Consultation;
+use App\Support\ClinicDepartments;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -141,7 +142,10 @@ class QueueController extends Controller
         $user = $request->user();
 
         $consultation = DB::transaction(function () use ($appointment, $user) {
-            if (! $appointment->staff_id && $user->isClinician() && ! $user->isCredentialRejected()) {
+            // The clinician calling in an unassigned patient becomes the
+            // attending one, when they serve that visit's department.
+            if (! $appointment->staff_id && $user->isClinician() && ! $user->isCredentialRejected()
+                && $user->clinicalDepartment() === ClinicDepartments::forType($appointment->type)) {
                 $appointment->update(['staff_id' => $user->id, 'staff' => $user->name]);
             }
 

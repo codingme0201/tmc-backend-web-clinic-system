@@ -257,7 +257,14 @@ class MedicalCertificateController extends Controller
         }
 
         $issuedByName = $request->validated('issued_by') ?: ($certificate->issued_by ?: $request->user()->name);
-        $issuedById = \App\Models\User::where('name', $issuedByName)->value('id');
+        $issuer = User::with('staffProfile')->where('name', $issuedByName)->first();
+        if ($issuer?->isCredentialRejected()) {
+            return response()->json([
+                'message' => "{$issuer->name}'s medical staff application was rejected, so they cannot issue certificates.",
+                'errors' => ['issued_by' => ['Select an active doctor or nurse as the issuing clinician.']],
+            ], 422);
+        }
+        $issuedById = $issuer?->id;
 
         $certificate->update([
             'status' => 'Issued',

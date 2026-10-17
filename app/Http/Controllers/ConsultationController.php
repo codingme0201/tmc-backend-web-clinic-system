@@ -374,7 +374,7 @@ class ConsultationController extends Controller
     {
         $staffId = $staffUser?->id ?? $consultation->staff_id;
         $staffName = $staffUser?->name ?? $consultation->staff;
-        $originalType = $consultation->appointment?->type;
+        $originalType = $consultation->type ?? $consultation->appointment?->type;
         $reasonParts = array_filter([
             $consultation->diagnosis ? "Follow-up for {$consultation->diagnosis}" : 'Follow-up consultation',
             $consultation->follow_up_notes,

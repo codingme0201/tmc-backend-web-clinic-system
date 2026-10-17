@@ -127,17 +127,20 @@ class RequiredFixesTest extends TestCase
         $this->appointment(['time' => '09:00 AM']);
         $this->appointment(['time' => '02:30 PM']);
         $this->appointment(['time' => '03:00 PM', 'status' => 'Rejected']);
+        $this->appointment(['time' => '09:30 AM', 'date' => now()->subDays(60)->toDateString()]);
         Consultation::create(['reference' => 'CONS-2026-700', 'date' => now()->toDateString(), 'time' => '10:30 AM', 'patient' => 'Walk In', 'status' => 'Completed']);
 
         $this->actingAs($this->admin(), 'sanctum');
 
         $activity = collect($this->getJson('/api/insights/activity')->assertOk()->json())->keyBy('label');
-        $this->assertSame(3, $activity['Appointments']['count']);
+        $this->assertSame(4, $activity['Appointments']['count']);
+        $this->assertSame(3, $activity['Appointments']['recentCount']);
         $this->assertSame(1, $activity['Consultations']['count']);
         $this->assertSame(100, $activity['Appointments']['percent']);
 
         $peak = collect($this->getJson('/api/insights/peak-hours')->assertOk()->json())->keyBy('label');
-        $this->assertSame(2, $peak['08:00 AM - 10:00 AM']['count']);
+        $this->assertSame(3, $peak['08:00 AM - 10:00 AM']['count']);
+        $this->assertSame(2, $peak['08:00 AM - 10:00 AM']['recentCount']);
         $this->assertSame(1, $peak['10:00 AM - 12:00 PM']['count']);
         $this->assertSame(1, $peak['02:00 PM - 04:00 PM']['count']);
         $this->assertSame(100, $peak['08:00 AM - 10:00 AM']['percent']);
@@ -204,6 +207,45 @@ class RequiredFixesTest extends TestCase
         $eligible = collect($this->getJson('/api/staff-schedules/eligible-staff')->json('data'))->keyBy('id');
         $this->assertSame('Dental', $eligible[$dentist->id]['staffProfile']['department']);
         $this->assertSame('General Medicine', $eligible[$physician->id]['staffProfile']['department']);
+    }
+
+    public function test_calling_in_an_unassigned_patient_only_self_assigns_within_the_department(): void
+    {
+        $this->roleWith('doctor', ['consultations.create']);
+        $dentist = $this->clinician('doctor', 'Dr. Tooth', ['license_type' => 'PRC Dentist License']);
+        $checkUp = $this->appointment(['type' => 'Check-up', 'status' => 'Approved', 'queue_number' => 1, 'checked_in_at' => now()]);
+        $dental = $this->appointment(['type' => 'Dental concern', 'status' => 'Approved', 'queue_number' => 2, 'checked_in_at' => now(), 'time' => '01:00 PM']);
+
+        $this->actingAs($dentist, 'sanctum');
+        $this->postJson("/api/queue/{$checkUp->id}/serve")->assertCreated();
+        $this->assertNull($checkUp->fresh()->staff_id);
+
+        $this->postJson("/api/queue/{$dental->id}/serve")->assertCreated()->assertJsonPath('data.type', 'Dental concern');
+        $this->assertSame($dentist->id, $dental->fresh()->staff_id);
+    }
+
+    public function test_rejected_staff_cannot_issue_certificates_and_dental_follow_ups_stay_dental(): void
+    {
+        $this->roleWith('admin', ['medical_certificates.view', 'medical_certificates.create', 'medical_certificates.update', 'medical_certificates.approve']);
+        $admin = $this->admin();
+        $this->clinician('doctor', 'Dr. Turned Down', ['credential_status' => 'Rejected']);
+        $consultation = Consultation::create([
+            'reference' => 'CONS-2026-701', 'date' => now()->toDateString(), 'time' => '09:00 AM', 'patient' => 'Cert Patient',
+            'patient_id' => '24-700001', 'status' => 'Completed', 'type' => 'Dental concern', 'diagnosis' => 'Caries',
+        ]);
+        $this->actingAs($admin, 'sanctum');
+
+        $id = $this->postJson('/api/medical-certificates', [
+            'patient' => 'Cert Patient', 'patient_id' => '24-700001', 'consultation_id' => $consultation->id, 'purpose' => 'Excuse',
+        ])->assertCreated()->json('data.id');
+        $this->postJson("/api/medical-certificates/{$id}/approve")->assertOk();
+        $this->postJson("/api/medical-certificates/{$id}/issue", ['issued_by' => 'Dr. Turned Down'])
+            ->assertUnprocessable()->assertJsonValidationErrors(['issued_by']);
+
+        $this->roleWith('admin', ['consultations.update']);
+        $this->postJson("/api/consultations/{$consultation->id}/follow-up", ['date' => now()->addDays(3)->toDateString(), 'time' => '10:00 AM'])
+            ->assertOk();
+        $this->assertSame('Dental concern', Appointment::where('previous_consultation_id', $consultation->id)->value('type'));
     }
 
     // --- Prescriptions: remove -----------------------------------------------------------------
