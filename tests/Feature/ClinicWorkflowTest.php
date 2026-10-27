@@ -21,6 +21,12 @@ class ClinicWorkflowTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->travelTo(now()->setDate(2026, 10, 19)->setTime(7, 0));
+    }
+
     private function roleWith(string $name, array $permissions = []): Role
     {
         $role = Role::firstOrCreate(['name' => $name], ['description' => ucfirst($name)]);
@@ -65,7 +71,7 @@ class ClinicWorkflowTest extends TestCase
             'reference' => 'APT-2026-'.str_pad((string) (800 + $counter), 3, '0', STR_PAD_LEFT),
             'patient' => "Patient {$counter}",
             'patient_id' => "24-90{$counter}",
-            'type' => 'Check-up',
+            'type' => 'General Check-up',
             'visit_type' => Appointment::VISIT_NEW,
             'reason' => 'Headache',
             'date' => now()->toDateString(),
@@ -74,6 +80,11 @@ class ClinicWorkflowTest extends TestCase
             'status' => 'Approved',
             'requested_on' => now()->toDateString(),
         ], $overrides));
+    }
+
+    private function shift(User $staff, string $date, string $end = '05:00 PM'): void
+    {
+        StaffSchedule::create(['user_id' => $staff->id, 'date' => $date, 'start_time' => '08:00 AM', 'end_time' => $end, 'status' => 'Available']);
     }
 
     // --- Queue (FIFO) ----------------------------------------------------------
@@ -172,6 +183,7 @@ class ClinicWorkflowTest extends TestCase
     {
         $admin = $this->admin();
         $doctor = $this->doctor('Dr. Assigned');
+        $this->shift($doctor, now()->toDateString());
         $appointment = $this->appointment();
         $consultation = Consultation::create([
             'reference' => 'CONS-2026-900', 'date' => $appointment->date, 'time' => $appointment->time,
@@ -200,6 +212,7 @@ class ClinicWorkflowTest extends TestCase
     {
         $admin = $this->admin();
         $doctor = $this->doctor('Dr. Busy');
+        $this->shift($doctor, now()->toDateString(), '12:00 PM');
         $taken = $this->appointment(['time' => '10:00 AM', 'staff_id' => $doctor->id, 'staff' => 'Dr. Busy']);
         $target = $this->appointment(['time' => '10:00 AM']);
         $afternoon = $this->appointment(['time' => '02:00 PM']);
@@ -228,15 +241,47 @@ class ClinicWorkflowTest extends TestCase
     public function test_booking_with_staff_id_assigns_the_doctor_and_records_patient_id(): void
     {
         $doctor = $this->doctor('Dr. Booked');
+        $this->shift($doctor, now()->addDays(2)->toDateString());
         $this->actingAs($this->admin(), 'sanctum');
 
+        Patient::factory()->create(['patient_id' => '24-123123', 'name' => 'Walk In']);
         $this->postJson('/api/appointments', [
-            'patient' => 'Walk In', 'patient_id' => '24-123123', 'type' => 'Fever', 'reason' => 'Fever',
+            'patient' => 'Walk In', 'patient_id' => '24-123123', 'type' => 'General Check-up', 'reason' => 'Fever',
             'date' => now()->addDays(2)->toDateString(), 'time' => '09:30 AM', 'staff_id' => $doctor->id,
         ])->assertCreated()
             ->assertJsonPath('data.staff', 'Dr. Booked')
             ->assertJsonPath('data.patientId', '24-123123')
             ->assertJsonPath('data.visitType', 'New Consultation');
+    }
+
+    public function test_follow_up_appointment_type_is_preserved_in_the_queue_and_consultation(): void
+    {
+        $this->travelTo(now()->setDate(2026, 10, 20)->setTime(9, 0));
+        $this->actingAs($this->admin(), 'sanctum');
+        $patient = Patient::factory()->create(['name' => 'Returning Patient']);
+        $id = $this->postJson('/api/appointments', [
+            'patient' => 'Returning Patient', 'patient_id' => $patient->patient_id, 'type' => Appointment::VISIT_FOLLOW_UP,
+            'reason' => 'Recheck', 'date' => now()->toDateString(), 'time' => '11:00 AM',
+        ])->assertCreated()
+            ->assertJsonPath('data.type', Appointment::VISIT_FOLLOW_UP)
+            ->assertJsonPath('data.visitType', Appointment::VISIT_FOLLOW_UP)
+            ->assertJsonPath('data.isFollowUp', true)
+            ->json('data.id');
+
+        $this->patchJson("/api/appointments/{$id}/status", ['status' => 'Approved'])->assertOk();
+        $this->postJson("/api/queue/{$id}/check-in")->assertOk()
+            ->assertJsonPath('data.type', Appointment::VISIT_FOLLOW_UP)
+            ->assertJsonPath('data.visitType', Appointment::VISIT_FOLLOW_UP)
+            ->assertJsonPath('data.isFollowUp', true);
+        $this->postJson("/api/queue/{$id}/serve")->assertCreated()
+            ->assertJsonPath('data.type', Appointment::VISIT_FOLLOW_UP)
+            ->assertJsonPath('data.visitType', Appointment::VISIT_FOLLOW_UP);
+        $this->assertDatabaseHas('appointments', [
+            'id' => $id, 'type' => Appointment::VISIT_FOLLOW_UP, 'visit_type' => Appointment::VISIT_FOLLOW_UP,
+        ]);
+        $this->assertDatabaseHas('consultations', [
+            'appointment_id' => $id, 'type' => Appointment::VISIT_FOLLOW_UP, 'visit_type' => Appointment::VISIT_FOLLOW_UP,
+        ]);
     }
 
     // --- Shared time slots -------------------------------------------------------------
@@ -328,7 +373,12 @@ class ClinicWorkflowTest extends TestCase
             'patient' => $patient->name, 'patient_id' => $patient->patient_id,
             'staff_id' => $doctor->id, 'staff' => 'Dr. Follow', 'status' => 'In Progress',
         ]);
-        $followUpDate = now()->addWeek()->toDateString();
+        $workingDate = now()->addWeek();
+        while (app(\App\Support\AppointmentCalendar::class)->reason($workingDate->toDateString())) {
+            $workingDate->addDay();
+        }
+        $followUpDate = $workingDate->toDateString();
+        $this->shift($doctor, $followUpDate);
 
         $this->actingAs($this->admin(), 'sanctum');
         $response = $this->postJson("/api/consultations/{$consultation->id}/complete", [
@@ -362,7 +412,8 @@ class ClinicWorkflowTest extends TestCase
             'patient' => 'Later Patient', 'patient_id' => '24-777000', 'staff_id' => $doctor->id,
             'staff' => 'Dr. Later', 'status' => 'Completed', 'follow_up_required' => true, 'diagnosis' => 'Sprain',
         ]);
-        $date = now()->addDays(5)->toDateString();
+        $date = now()->addWeek()->toDateString();
+        $this->shift($doctor, $date);
         $this->appointment(['date' => $date, 'time' => '11:00 AM', 'staff_id' => $doctor->id, 'staff' => 'Dr. Later']);
 
         $this->actingAs($this->admin(), 'sanctum');
@@ -380,6 +431,8 @@ class ClinicWorkflowTest extends TestCase
 
     public function test_follow_up_booking_links_the_previous_consultation_of_the_same_patient(): void
     {
+        Patient::factory()->create(['patient_id' => '24-555111', 'name' => 'Returning']);
+        Patient::factory()->create(['patient_id' => '24-999999', 'name' => 'Someone Else']);
         $previous = Consultation::create([
             'reference' => 'CONS-2026-970', 'date' => now()->subWeek()->toDateString(), 'time' => '09:00 AM',
             'patient' => 'Returning', 'patient_id' => '24-555111', 'status' => 'Completed', 'diagnosis' => 'Allergy',
@@ -388,21 +441,22 @@ class ClinicWorkflowTest extends TestCase
         $date = now()->addDays(4)->toDateString();
 
         $this->postJson('/api/appointments', [
-            'patient' => 'Someone Else', 'patient_id' => '24-999999', 'type' => 'Check-up', 'reason' => 'Recheck',
+            'patient' => 'Someone Else', 'patient_id' => '24-999999', 'type' => 'General Check-up', 'reason' => 'Recheck',
             'date' => $date, 'time' => '09:00 AM', 'visit_type' => 'Follow-up Consultation',
             'previous_consultation_id' => $previous->id,
         ])->assertUnprocessable()->assertJsonValidationErrors(['previous_consultation_id']);
 
         $this->postJson('/api/appointments', [
-            'patient' => 'Returning', 'patient_id' => '24-555111', 'type' => 'Check-up', 'reason' => 'Recheck',
+            'patient' => 'Returning', 'patient_id' => '24-555111', 'type' => 'General Check-up', 'reason' => 'Recheck',
             'date' => $date, 'time' => '09:00 AM', 'previous_consultation_id' => $previous->id,
         ])->assertCreated()
             ->assertJsonPath('data.visitType', 'Follow-up Consultation')
             ->assertJsonPath('data.previousConsultation.diagnosis', 'Allergy');
 
-        // Older clients that send the "Follow-up" type still get a follow-up visit.
+        // Selecting the follow-up appointment type also determines the visit type.
         $this->postJson('/api/appointments', [
-            'patient' => 'Legacy', 'type' => 'Follow-up', 'reason' => 'Recheck', 'date' => $date, 'time' => '10:00 AM',
+            'patient' => 'Returning', 'patient_id' => '24-555111', 'type' => Appointment::VISIT_FOLLOW_UP,
+            'reason' => 'Recheck', 'date' => $date, 'time' => '10:00 AM',
         ])->assertCreated()->assertJsonPath('data.visitType', 'Follow-up Consultation');
     }
 
@@ -442,7 +496,10 @@ class ClinicWorkflowTest extends TestCase
     public function test_clinic_calendar_is_removed(): void
     {
         $this->actingAs($this->admin(), 'sanctum');
-        $start = now()->addDays(10)->startOfDay();
+        $start = now()->addDays(12)->startOfDay();
+        while (app(\App\Support\AppointmentCalendar::class)->reason($start->toDateString())) {
+            $start->addDay();
+        }
 
         $this->assertFalse(\Illuminate\Support\Facades\Schema::hasTable('clinic_events'));
         $this->assertFalse(\Illuminate\Support\Facades\Schema::hasTable('unavailable_schedules'));
@@ -452,8 +509,8 @@ class ClinicWorkflowTest extends TestCase
         $this->postJson('/api/calendar/blocked', [])->assertNotFound();
 
         $this->postJson('/api/appointments', [
-            'patient' => 'Range Test', 'type' => 'Check-up', 'reason' => 'x', 'time' => '09:00 AM',
-            'date' => $start->copy()->addDays(2)->toDateString(),
+            'patient' => 'Range Test', 'patient_id' => Patient::factory()->create(['name' => 'Range Test'])->patient_id, 'type' => 'General Check-up', 'reason' => 'x', 'time' => '09:00 AM',
+            'date' => $start->toDateString(),
         ])->assertCreated();
     }
 
@@ -471,7 +528,7 @@ class ClinicWorkflowTest extends TestCase
         $this->postJson('/api/patients', ['name' => 'Typed Course', 'type' => 'Student', 'courseDept' => 'BS Made Up'])
             ->assertUnprocessable()->assertJsonValidationErrors(['courseDept']);
 
-        $id = $this->postJson('/api/patients', ['name' => 'Picked Course', 'type' => 'Student', 'courseDept' => $validCourse])
+        $id = $this->postJson('/api/patients', ['id' => '26-000001', 'name' => 'Picked Course', 'type' => 'Student', 'courseDept' => $validCourse])
             ->assertCreated()->json('data.id');
 
         $legacy = Patient::factory()->create(['course_dept' => 'Old Free Text Course']);

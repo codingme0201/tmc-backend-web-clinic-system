@@ -20,6 +20,12 @@ class ActivityLogController extends Controller
     {
         $query = ActivityLog::with('author.role');
 
+        // Dashboard administrator feed: filter before the limit so other
+        // staff activity cannot push administrator actions out of the feed.
+        if ($request->query('role') === 'admin') {
+            $query->whereHas('author.role', fn ($role) => $role->where('name', 'admin'));
+        }
+
         // Search — matches action text or user name
         if ($search = $request->query('search')) {
             $q = strtolower($search);

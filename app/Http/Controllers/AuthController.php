@@ -137,9 +137,9 @@ class AuthController extends Controller
             'lastName' => ['nullable', 'string', 'max:100'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', Password::min(8)],
-            'patient_id' => ['nullable', 'string', 'max:50'],
-            'student_id' => ['nullable', 'string', 'max:50'],
-            'studentId' => ['nullable', 'string', 'max:50'],
+            'patient_id' => ['required_without_all:student_id,studentId', 'nullable', 'string', 'regex:/^[0-9]{2}-[0-9]{6}$/'],
+            'student_id' => ['required_without_all:patient_id,studentId', 'nullable', 'string', 'regex:/^[0-9]{2}-[0-9]{6}$/'],
+            'studentId' => ['required_without_all:patient_id,student_id', 'nullable', 'string', 'regex:/^[0-9]{2}-[0-9]{6}$/'],
             'type' => ['nullable', 'string', 'max:50'],
             'age' => ['nullable', 'integer', 'min:1', 'max:120'],
             'course' => ['nullable', 'string', 'max:150', AcademicPrograms::rule()],
@@ -179,10 +179,6 @@ class AuthController extends Controller
             ], 422);
         }
 
-        if (! $patientId) {
-            $patientId = Patient::generatePlaceholderId();
-        }
-
         $course = $validated['course'] ?? $validated['courseDept'] ?? $validated['course_dept'] ?? 'General';
         $phone = $validated['phone'] ?? $validated['contact'] ?? '';
         $emergName = $validated['emergencyContactName'] ?? $validated['emergency_contact_name'] ?? null;
@@ -207,7 +203,6 @@ class AuthController extends Controller
             'emergency_contact' => $emergContact ?? '',
             'status' => 'Active',
         ]);
-        $patient->ensureMedicalRecord();
 
         $studentRole = Role::where('name', 'student')->first()
             ?? Role::where('name', 'patient')->first()
@@ -316,6 +311,7 @@ class AuthController extends Controller
         return [
             'id' => $user->id,
             'name' => $user->name,
+            'profilePictureUrl' => $user->profilePictureUrl(),
             'email' => $user->email,
             'role' => $user->role?->name,
             'patientId' => $user->patient_id,

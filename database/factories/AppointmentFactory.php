@@ -17,7 +17,8 @@ class AppointmentFactory extends Factory
      */
     public function definition(): array
     {
-        $date = fake()->dateTimeBetween('-7 days', '+21 days');
+        // Active workflow fixtures should default to upcoming appointments.
+        $date = fake()->dateTimeBetween('+1 day', '+21 days');
 
         return [
             'reference' => 'APT-2026-'.str_pad((string) fake()->unique()->numberBetween(1, 999), 3, '0', STR_PAD_LEFT),

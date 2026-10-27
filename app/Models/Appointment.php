@@ -20,11 +20,17 @@ class Appointment extends Model
     /** @use HasFactory<AppointmentFactory> */
     use HasFactory;
 
+    /** Doctors may access only appointments assigned to their account. */
+    public function ensureAccessibleBy(User $user): void
+    {
+        abort_if($user->role?->name === 'doctor' && (int) $this->staff_id !== (int) $user->id, 403, 'This appointment is not assigned to you.');
+    }
+
     /**
      * Appointment lifecycle statuses, matching the existing frontend exactly.
      */
     public const STATUSES = [
-        'Pending', 'Under Review', 'Approved', 'Rescheduled', 'Rejected', 'Cancelled', 'Completed', 'No-Show',
+        'Pending', 'Under Review', 'Approved', 'Rescheduled', 'Rejected', 'Cancelled', 'Completed', 'No-Show', 'Expired',
     ];
 
     /**
@@ -37,21 +43,21 @@ class Appointment extends Model
      */
     public const TRANSITIONS = [
         'Pending' => ['Under Review', 'Approved', 'Rejected', 'Cancelled', 'No-Show'],
-        'Under Review' => ['Approved', 'Rejected', 'Cancelled', 'Completed', 'No-Show'],
+        'Under Review' => ['Pending', 'Approved', 'Rejected', 'Cancelled', 'Completed', 'No-Show'],
         'Approved' => ['Cancelled', 'Completed', 'No-Show'],
         'Rescheduled' => ['Approved', 'Rejected', 'Cancelled', 'Completed', 'No-Show'],
         'Rejected' => [],
         'Cancelled' => [],
         'Completed' => [],
         'No-Show' => [],
+        'Expired' => [],
     ];
 
     /**
-     * Service categories (the reason category of the visit). "Follow-up" is
-     * still accepted from older clients and is stored as a Follow-up visit.
+     * Service categories available when booking an appointment.
      */
     public const TYPES = [
-        'Check-up', 'Dental concern', 'Follow-up', 'Fever', 'Vaccination', 'Emergency',
+        'General Check-up', 'Follow-up Consultation',
     ];
 
     public const VISIT_NEW = 'New Consultation';
@@ -115,11 +121,15 @@ class Appointment extends Model
     }
 
     /**
-     * Resolve the visit type, treating the legacy "Follow-up" type as a
-     * follow-up visit.
+     * Follow-up appointment bookings determine the visit type automatically.
+     * Also recognize the legacy "Follow-up" type and linked previous visits.
      */
     public static function resolveVisitType(?string $visitType, ?string $type, ?int $previousConsultationId = null): string
     {
+        if ($type === self::VISIT_FOLLOW_UP) {
+            return self::VISIT_FOLLOW_UP;
+        }
+
         if (in_array($visitType, self::VISIT_TYPES, true)) {
             return $visitType;
         }

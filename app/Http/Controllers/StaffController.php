@@ -24,6 +24,7 @@ class StaffController extends Controller
     public function index(): AnonymousResourceCollection
     {
         $today = now()->toDateString();
+        app(\App\Services\WeeklyScheduleService::class)->ensureRange($today, $today);
         $minutesNow = (int) now()->format('G') * 60 + (int) now()->format('i');
 
         $clinicians = User::clinicians()
@@ -47,6 +48,7 @@ class StaffController extends Controller
      */
     public function updateStatus(Request $request): StaffResource|JsonResponse
     {
+        app(\App\Services\WeeklyScheduleService::class)->ensureRange(now()->toDateString(), now()->toDateString());
         $validated = $request->validate([
             'user_id' => ['nullable', 'integer'],
             'name' => ['required_without:user_id', 'nullable', 'string', 'max:255'],
@@ -106,6 +108,7 @@ class StaffController extends Controller
             'status' => $override?->status ?? ($onShiftNow ? 'On duty' : 'Off duty'),
         ]);
         $entry->id = $user->id;
+        $entry->profile_picture_url = $user->profilePictureUrl();
         $entry->department = $user->clinicalDepartment();
         $entry->scheduled_today = $shifts->contains('status', 'Available');
         $entry->on_shift_now = $onShiftNow;

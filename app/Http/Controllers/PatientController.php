@@ -48,19 +48,6 @@ class PatientController extends Controller
     {
         $patient = $request->user()->patient;
 
-        if (! $patient) {
-            // Auto-create a linked patient record if one doesn't exist yet
-            $patient = Patient::create([
-                'patient_id' => Patient::generatePlaceholderId(),
-                'name' => $request->user()->name,
-                'type' => 'Student',
-                'course_dept' => 'General',
-                'status' => 'Active',
-            ]);
-            $patient->ensureMedicalRecord();
-            $request->user()->update(['patient_id' => $patient->patient_id]);
-        }
-
         $validated = $request->validate([
             'firstName' => ['nullable', 'string', 'max:100'],
             'first_name' => ['nullable', 'string', 'max:100'],
@@ -69,11 +56,12 @@ class PatientController extends Controller
             'lastName' => ['nullable', 'string', 'max:100'],
             'last_name' => ['nullable', 'string', 'max:100'],
             'age' => ['nullable', 'integer', 'min:1', 'max:120'],
-            'studentId' => ['nullable', 'string', 'max:50'],
-            'student_id' => ['nullable', 'string', 'max:50'],
-            'course' => ['nullable', 'string', 'max:150', AcademicPrograms::rule($patient->course_dept)],
-            'courseDept' => ['nullable', 'string', 'max:150', AcademicPrograms::rule($patient->course_dept)],
-            'course_dept' => ['nullable', 'string', 'max:150', AcademicPrograms::rule($patient->course_dept)],
+            'studentId' => ['nullable', 'string', 'regex:/^[0-9]{2}-[0-9]{6}$/'],
+            'sex' => ['nullable', 'in:Female,Male,Other'],
+            'student_id' => ['nullable', 'string', 'regex:/^[0-9]{2}-[0-9]{6}$/'],
+            'course' => ['nullable', 'string', 'max:150', AcademicPrograms::rule($patient?->course_dept)],
+            'courseDept' => ['nullable', 'string', 'max:150', AcademicPrograms::rule($patient?->course_dept)],
+            'course_dept' => ['nullable', 'string', 'max:150', AcademicPrograms::rule($patient?->course_dept)],
             'block' => ['nullable', 'string', 'max:50'],
             'address' => ['nullable', 'string', 'max:500'],
             'nationality' => ['nullable', 'string', 'max:100'],
@@ -85,6 +73,22 @@ class PatientController extends Controller
             'emergency_contact_phone' => PhoneNumber::rules(),
             'emergencyContact' => ['nullable', 'string', 'max:255'],
         ]);
+
+        if (! $patient) {
+            $studentId = $validated['studentId'] ?? $validated['student_id'] ?? $request->user()->patient_id;
+            if (! $studentId || ! preg_match('/^[0-9]{2}-[0-9]{6}$/', $studentId)) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['studentId' => ['Enter your TMC Student ID in 00-000000 format.']]);
+            }
+            if (Patient::where('patient_id', $studentId)->exists() || Patient::idHasClinicalRecords($studentId) || MedicalRecord::where('patient_id', $studentId)->exists() || User::where('patient_id', $studentId)->whereKeyNot($request->user()->id)->exists()) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['studentId' => ['This student ID is already in use.']]);
+            }
+            $patient = DB::transaction(function () use ($studentId, $request) {
+                $patient = Patient::create(['patient_id' => $studentId, 'name' => $request->user()->name, 'type' => 'Student', 'course_dept' => 'General', 'status' => 'Active']);
+                $request->user()->update(['patient_id' => $studentId]);
+
+                return $patient;
+            });
+        }
 
         $firstName = $validated['firstName'] ?? $validated['first_name'] ?? $patient->first_name;
         $middleName = $validated['middleName'] ?? $validated['middle_name'] ?? $patient->middle_name;
@@ -100,6 +104,7 @@ class PatientController extends Controller
         if ($middleName !== null) $updateData['middle_name'] = $middleName;
         if ($lastName !== null) $updateData['last_name'] = $lastName;
         if (array_key_exists('age', $validated)) $updateData['age'] = $validated['age'];
+        if (array_key_exists('sex', $validated)) $updateData['sex'] = $validated['sex'];
         if ($course !== null) $updateData['course_dept'] = $course;
         if (array_key_exists('block', $validated)) $updateData['block'] = $validated['block'];
         if (array_key_exists('address', $validated)) $updateData['address'] = $validated['address'];
@@ -123,13 +128,13 @@ class PatientController extends Controller
         }
 
         // patient_id is the plain-string key every clinical table uses, so a
-        // student may only replace the auto-generated placeholder ID, only
-        // while nothing references it yet, and only with an ID nobody uses.
+        // student may only replace a placeholder with their supplied Student
+        // ID, never adopt another patient's records or change a real ID.
         $oldPatientId = $patient->patient_id;
         if ($studentId && $studentId !== $oldPatientId) {
             $canChange = Patient::isPlaceholderId($oldPatientId)
-                && ! Patient::idHasClinicalRecords($oldPatientId)
                 && ! Patient::where('patient_id', $studentId)->exists()
+                && ! User::where('patient_id', $studentId)->whereKeyNot($request->user()->id)->exists()
                 && ! Patient::idHasClinicalRecords($studentId)
                 && ! MedicalRecord::where('patient_id', $studentId)->exists();
 
@@ -139,11 +144,12 @@ class PatientController extends Controller
                     'errors' => ['studentId' => ['The student ID cannot be changed.']],
                 ], 422);
             }
-
-            $updateData['patient_id'] = $studentId;
         }
 
-        DB::transaction(function () use ($patient, $updateData, $request, $oldPatientId, $fullName) {
+        DB::transaction(function () use ($patient, $updateData, $request, $oldPatientId, $fullName, $studentId) {
+            if ($studentId && $studentId !== $oldPatientId) {
+                $patient->renamePatientId($studentId);
+            }
             if (! empty($updateData)) {
                 $patient->update($updateData);
             }
@@ -152,10 +158,6 @@ class PatientController extends Controller
                 $request->user()->update(['name' => $fullName]);
             }
 
-            if ($patient->patient_id !== $oldPatientId) {
-                MedicalRecord::where('patient_id', $oldPatientId)->update(['patient_id' => $patient->patient_id]);
-                $request->user()->update(['patient_id' => $patient->patient_id]);
-            }
         });
 
         $patient->loadCount(['appointments', 'consultations', 'medicalCertificates', 'prescriptions']);
@@ -184,7 +186,14 @@ class PatientController extends Controller
      */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $query = Patient::withCount(['appointments', 'consultations', 'medicalCertificates', 'prescriptions']);
+        $query = Patient::withCount(['appointments', 'consultations', 'medicalCertificates', 'prescriptions'])
+            ->withMax(['appointments as last_appointment_visit' => fn ($query) => $query
+                ->where('date', '<=', now()->toDateString())
+                ->whereIn('status', ['Approved', 'Completed'])
+                ->where(fn ($query) => $query->whereNotNull('checked_in_at')->orWhere('status', 'Completed'))], 'date')
+            ->withMax(['consultations as last_consultation_visit' => fn ($query) => $query
+                ->where('date', '<=', now()->toDateString())
+                ->whereIn('status', ['In Progress', 'Completed'])], 'date');
 
         $search = trim((string) $request->query('search', ''));
         if ($search !== '') {
@@ -340,10 +349,11 @@ class PatientController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            // Optional in the Register Patient form; a placeholder is generated when blank.
-            'id' => ['nullable', 'string', 'max:255', 'unique:patients,patient_id'],
+            'id' => ['required', 'string', 'regex:/^[0-9]{2}-[0-9]{6}$/', 'unique:patients,patient_id'],
             'name' => ['required', 'string', 'max:255'],
-            'type' => ['required', 'string', 'max:255'],
+            'age' => ['nullable', 'integer', 'min:1', 'max:120'],
+            'type' => ['sometimes', 'in:Student'],
+            'sex' => ['nullable', 'in:Female,Male,Other'],
             'courseDept' => ['nullable', 'string', 'max:255', AcademicPrograms::rule()],
             'contact' => PhoneNumber::rules(),
             'emergencyContact' => ['nullable', 'string', 'max:255'],
@@ -353,9 +363,11 @@ class PatientController extends Controller
 
         $patient = DB::transaction(function () use ($validated) {
             $patient = Patient::create([
-                'patient_id' => ($validated['id'] ?? null) ?: Patient::generatePlaceholderId(),
+                'patient_id' => $validated['id'],
                 'name' => $validated['name'],
-                'type' => $validated['type'],
+                'age' => $validated['age'] ?? null,
+                'type' => 'Student',
+                'sex' => $validated['sex'] ?? null,
                 'course_dept' => $validated['courseDept'] ?? '',
                 'contact' => $validated['contact'] ?? '',
                 'emergency_contact' => $validated['emergencyContact'] ?? '',
@@ -363,7 +375,6 @@ class PatientController extends Controller
                 'history' => $validated['history'] ?? 'None',
                 'status' => 'Active',
             ]);
-            $patient->ensureMedicalRecord();
 
             return $patient;
         });
@@ -387,6 +398,7 @@ class PatientController extends Controller
             'lastName' => ['nullable', 'string', 'max:100'],
             'age' => ['nullable', 'integer', 'min:1', 'max:120'],
             'type' => ['sometimes', 'string', 'max:255'],
+            'sex' => ['nullable', 'in:Female,Male,Other'],
             'courseDept' => ['nullable', 'string', 'max:255', AcademicPrograms::rule($patient->course_dept)],
             'block' => ['nullable', 'string', 'max:50'],
             'address' => ['nullable', 'string', 'max:500'],
@@ -401,7 +413,7 @@ class PatientController extends Controller
 
         $map = [
             'name' => 'name', 'firstName' => 'first_name', 'middleName' => 'middle_name',
-            'lastName' => 'last_name', 'age' => 'age', 'type' => 'type', 'courseDept' => 'course_dept',
+            'lastName' => 'last_name', 'age' => 'age', 'sex' => 'sex', 'type' => 'type', 'courseDept' => 'course_dept',
             'block' => 'block', 'address' => 'address', 'nationality' => 'nationality',
             'contact' => 'contact', 'emergencyContactName' => 'emergency_contact_name',
             'emergencyContactPhone' => 'emergency_contact_phone', 'emergencyContact' => 'emergency_contact',

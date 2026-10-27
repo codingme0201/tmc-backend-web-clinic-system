@@ -53,6 +53,7 @@ class SyncState
         User::class => 'users',
         Notification::class => 'notifications',
         StaffSchedule::class => 'staff_schedules',
+        \App\Models\WeeklyStaffSchedule::class => 'staff_schedules',
         StaffProfile::class => 'staff_profiles',
         SystemSetting::class => 'settings',
         ActivityLog::class => 'activity_logs',

@@ -18,7 +18,7 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
 #[Fillable(['name', 'email', 'password', 'role_id', 'status', 'patient_id'])]
-#[Hidden(['password', 'remember_token'])]
+#[Hidden(['password', 'remember_token', 'profile_picture_path'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -80,6 +80,11 @@ class User extends Authenticatable
     public function staffSchedules(): HasMany
     {
         return $this->hasMany(StaffSchedule::class);
+    }
+
+    public function weeklyStaffSchedules(): HasMany
+    {
+        return $this->hasMany(WeeklyStaffSchedule::class);
     }
 
     public function staffProfile(): HasOne
@@ -152,5 +157,12 @@ class User extends Authenticatable
     public function hasPermission(string $permission): bool
     {
         return $this->role?->permissions()->where('name', $permission)->exists() ?? false;
+    }
+
+    public function profilePictureUrl(): ?string
+    {
+        return $this->profile_picture_path
+            ? '/profile-pictures/'.$this->id.'?v='.hash('sha256', $this->profile_picture_path)
+            : null;
     }
 }

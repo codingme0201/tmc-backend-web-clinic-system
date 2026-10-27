@@ -8,16 +8,14 @@ use Illuminate\Validation\Rule;
 
 class UpdateStaffAvailabilityRequest extends FormRequest
 {
-    /**
-     * Determine if the user is authorized to make this request.
-     *
-     * Authorization is handled by the route-level `permission:schedules.update`
-     * middleware — this method always returns true following the project
-     * convention.
-     */
     public function authorize(): bool
     {
-        return true;
+        $schedule = $this->route('schedule');
+        if ($schedule && ! StaffSchedule::canManageFor($this->user(), $schedule->user_id)) {
+            return false;
+        }
+
+        return StaffSchedule::canManageFor($this->user(), (int) $this->input('user_id', $schedule?->user_id ?? 0));
     }
 
     /**

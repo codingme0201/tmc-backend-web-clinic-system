@@ -27,7 +27,7 @@ class ClinicSchedule
     /**
      * Same-day booking closes after this time.
      */
-    public const BOOKING_CUTOFF = '04:30 PM';
+    public const BOOKING_CUTOFF = self::WORK_END;
 
     /**
      * Bookable patient slots (appointments and consultations).
@@ -35,7 +35,7 @@ class ClinicSchedule
     public const TIME_SLOTS = [
         '08:00 AM', '08:30 AM', '09:00 AM', '09:30 AM', '10:00 AM', '10:30 AM',
         '11:00 AM', '11:30 AM', '01:00 PM', '01:30 PM', '02:00 PM', '02:30 PM',
-        '03:00 PM', '03:30 PM', '04:00 PM', '04:30 PM',
+        '03:00 PM', '03:30 PM', '04:00 PM', '04:30 PM', '05:00 PM',
     ];
 
     /**
@@ -108,7 +108,7 @@ class ClinicSchedule
 
     /**
      * Whether a same-day slot can no longer be booked: every slot once the
-     * booking cutoff (4:30 PM) has passed, and slots that have already ended.
+     * booking cutoff (5:00 PM) has passed, and slots that have already ended.
      * Other dates are never closed by this rule.
      */
     public static function isSlotClosed(string $date, ?string $time, ?CarbonInterface $now = null): bool

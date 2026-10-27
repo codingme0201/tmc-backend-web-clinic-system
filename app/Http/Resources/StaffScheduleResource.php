@@ -23,6 +23,8 @@ class StaffScheduleResource extends JsonResource
             'endTime' => ClinicSchedule::normalize($this->end_time),
             'status' => $this->status,
             'notes' => $this->notes,
+            'isWeekly' => $this->weekly_staff_schedule_id !== null,
+            'isOverride' => $this->is_override,
             'user' => $this->whenLoaded('user', fn () => [
                 'id' => $this->user->id,
                 'name' => $this->user->name,

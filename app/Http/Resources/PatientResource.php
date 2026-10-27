@@ -11,7 +11,7 @@ class PatientResource extends JsonResource
      * Transform the patient into the shape the frontend consumes.
      *
      * `id` is the auto-increment database key (used for API routing).
-     * `patientId` is the human-readable registry id (e.g. "2023-0104").
+     * `patientId` and `studentId` are the same exact TMC Student ID (00-000000).
      *
      * @return array<string, mixed>
      */
@@ -26,6 +26,7 @@ class PatientResource extends JsonResource
             'middleName' => $this->middle_name,
             'lastName' => $this->last_name,
             'age' => $this->age,
+            'sex' => $this->sex,
             'type' => $this->type,
             'course' => $this->course_dept,
             'courseDept' => $this->course_dept,
@@ -42,6 +43,8 @@ class PatientResource extends JsonResource
             'allergies' => $this->allergies,
             'history' => $this->history,
             'status' => $this->status,
+            'registeredOn' => $this->created_at?->copy()->timezone(config('app.timezone'))->toDateString(),
+            'lastVisitOn' => $this->whenHas('last_appointment_visit', fn () => max($this->last_appointment_visit ?? '', $this->last_consultation_visit ?? '') ?: null),
             'isProfileComplete' => $this->isProfileComplete(),
             'appointmentsCount' => $this->whenCounted('appointments'),
             'consultationsCount' => $this->whenCounted('consultations'),

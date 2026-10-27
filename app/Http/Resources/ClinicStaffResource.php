@@ -24,6 +24,7 @@ class ClinicStaffResource extends JsonResource
         return [
             'id' => $this->id,
             'name' => $this->name,
+            'profilePictureUrl' => $this->profilePictureUrl(),
             'email' => $this->email,
             'status' => $this->status ?? 'active',
             'role' => $this->role?->name,

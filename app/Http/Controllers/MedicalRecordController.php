@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\MedicalRecordProvenance;
 use App\Http\Requests\StoreMedicalRecordAllergyRequest;
 use App\Http\Requests\StoreMedicalRecordConditionRequest;
 use App\Http\Requests\UpdateMedicalRecordAllergyRequest;
@@ -13,7 +14,6 @@ use App\Models\MedicalRecordAllergy;
 use App\Models\MedicalRecordCondition;
 use App\Models\MedicalRecordHistory;
 use App\Models\MedicalRecordMedication;
-use App\Models\Patient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -48,7 +48,10 @@ class MedicalRecordController extends Controller
             $query->where('status', $status);
         }
 
-        return MedicalRecordResource::collection($query->orderBy('name')->get());
+        $records = $query->orderBy('name')->get();
+        MedicalRecordProvenance::prime($records, $request);
+
+        return MedicalRecordResource::collection($records);
     }
 
     /**
@@ -60,36 +63,22 @@ class MedicalRecordController extends Controller
     }
 
     /**
-     * Create the medical record for a registered patient.
-     *
-     * Each patient has at most one record (patient_id is unique), so this
-     * returns 409 when one already exists. Demographics are copied from the
-     * patient registry; age/sex can be supplied when the registry lacks them.
+     * Manual creation is unavailable: records originate from a saved,
+     * completed consultation for a checked-in patient.
      */
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'patientId' => ['required', 'string', 'exists:patients,patient_id'],
             'age' => ['nullable', 'integer', 'min:0', 'max:120'],
-            'sex' => ['nullable', 'string', 'in:Male,Female,Unspecified'],
+            'sex' => ['nullable', 'string', 'in:Male,Female,Other,Unspecified'],
         ]);
 
         if (MedicalRecord::where('patient_id', $validated['patientId'])->exists()) {
             return response()->json(['message' => 'This patient already has a medical record.'], 409);
         }
 
-        $patient = Patient::where('patient_id', $validated['patientId'])->firstOrFail();
-        $record = $patient->ensureMedicalRecord();
-
-        $overrides = array_filter([
-            'age' => $validated['age'] ?? null,
-            'sex' => $validated['sex'] ?? null,
-        ], fn ($v) => $v !== null);
-        if ($overrides) {
-            $record->update($overrides);
-        }
-
-        return $this->resourceWithChildren($record)->response()->setStatusCode(201);
+        return response()->json(['message' => 'Medical Records are created only when a checked-in patient\'s consultation is completed and saved.'], 422);
     }
 
     /**

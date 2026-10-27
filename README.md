@@ -7,6 +7,22 @@
 <a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
 </p>
 
+## Automatic appointment statuses
+
+Overdue, unchecked Pending appointments become **Expired**. Overdue, unchecked
+Approved appointments become **No-Show**. Checked-in, Completed and other statuses
+are preserved. Comparisons use `APP_TIMEZONE` (default `Asia/Manila`) and the
+appointment's scheduled start time, with no grace period.
+
+`appointments:refresh-statuses` runs every minute through Laravel's scheduler.
+The root `run.sh` and `composer run dev` start `php artisan schedule:work` alongside
+the application. In production, configure the server's scheduler to invoke
+`php artisan schedule:run` every minute from the backend directory. This keeps
+statuses current even when nobody has the application open. Authenticated API
+requests also reconcile overdue appointments, including live-sync polling, so
+open appointment lists, dashboards, reports and booking availability refresh
+automatically. No database schema change is needed.
+
 ## About Laravel
 
 Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:

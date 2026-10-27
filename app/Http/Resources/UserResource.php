@@ -21,6 +21,7 @@ class UserResource extends JsonResource
         return [
             'id' => $this->id,
             'name' => $this->name,
+            'profilePictureUrl' => $this->profilePictureUrl(),
             'email' => $this->email,
             'status' => $this->status ?? 'active',
             'role_id' => $this->role_id,
@@ -47,6 +48,7 @@ class UserResource extends JsonResource
                 'middleName' => $this->patient?->middle_name,
                 'lastName' => $this->patient?->last_name,
                 'age' => $this->patient?->age,
+                'sex' => $this->patient?->sex,
                 'type' => $this->patient?->type,
                 'course' => $this->patient?->course_dept,
                 'courseDept' => $this->patient?->course_dept,

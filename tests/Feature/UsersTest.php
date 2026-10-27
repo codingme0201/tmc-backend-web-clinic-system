@@ -24,6 +24,104 @@ class UsersTest extends TestCase
         return User::factory()->create(['role_id' => $role->id]);
     }
 
+    public function test_role_changes_stay_within_the_existing_account_category(): void
+    {
+        $admin = $this->adminUser();
+        $studentRole = Role::firstOrCreate(['name' => 'student'], ['description' => 'Student']);
+        $doctorRole = Role::firstOrCreate(['name' => 'doctor'], ['description' => 'Doctor']);
+        $nurseRole = Role::firstOrCreate(['name' => 'nurse'], ['description' => 'Nurse']);
+        $patient = Patient::factory()->create();
+        $student = User::factory()->create(['role_id' => $studentRole->id, 'patient_id' => $patient->patient_id]);
+        $doctor = User::factory()->create(['role_id' => $doctorRole->id]);
+        $patientBefore = $patient->fresh()->getAttributes();
+        $permissionsBefore = Role::with('permissions')->get()->mapWithKeys(fn ($role) => [$role->id => $role->permissions->modelKeys()])->all();
+        $this->actingAs($admin, 'sanctum');
+
+        foreach ([$doctorRole, $nurseRole] as $role) {
+            $this->patchJson("/api/users/{$student->id}/role", ['role_id' => $role->id])
+                ->assertUnprocessable()->assertJsonValidationErrors(['role_id']);
+        }
+        $this->patchJson("/api/users/{$doctor->id}/role", ['role_id' => $studentRole->id])
+            ->assertUnprocessable()->assertJsonValidationErrors(['role_id']);
+        $this->assertSame($studentRole->id, $student->fresh()->role_id);
+        $this->assertSame($patientBefore, $patient->fresh()->getAttributes());
+
+        // Authorized changes within staff keep working without modifying role permissions.
+        $this->patchJson("/api/users/{$doctor->id}/role", ['role_id' => $nurseRole->id])
+            ->assertOk()->assertJsonPath('data.role.name', 'nurse');
+        $this->assertSame($permissionsBefore, Role::with('permissions')->get()->mapWithKeys(fn ($role) => [$role->id => $role->permissions->modelKeys()])->all());
+    }
+
+    public function test_profile_edits_cannot_silently_change_roles(): void
+    {
+        $admin = $this->adminUser();
+        $studentRole = Role::firstOrCreate(['name' => 'student'], ['description' => 'Student']);
+        $doctorRole = Role::firstOrCreate(['name' => 'doctor'], ['description' => 'Doctor']);
+        $patient = Patient::factory()->create(['sex' => 'Female', 'nationality' => 'Existing Nationality']);
+        $student = User::factory()->create(['role_id' => $studentRole->id, 'patient_id' => $patient->patient_id]);
+        $this->actingAs($admin, 'sanctum');
+        $this->putJson("/api/users/{$student->id}", ['name' => 'Unexpected Change', 'role_id' => $doctorRole->id])
+            ->assertUnprocessable()->assertJsonValidationErrors(['role_id']);
+        $this->assertNotSame('Unexpected Change', $student->fresh()->name);
+        $this->putJson("/api/users/{$student->id}", ['name' => 'Updated Student'])->assertOk()
+            ->assertJsonPath('data.role.name', 'student')
+            ->assertJsonPath('data.patient.sex', 'Female')
+            ->assertJsonPath('data.patient.nationality', 'Existing Nationality');
+        $this->assertSame($studentRole->id, $student->fresh()->role_id);
+    }
+
+    public function test_role_assignment_requires_existing_update_permission(): void
+    {
+        $doctorRole = Role::firstOrCreate(['name' => 'doctor'], ['description' => 'Doctor']);
+        $nurseRole = Role::firstOrCreate(['name' => 'nurse'], ['description' => 'Nurse']);
+        $doctor = User::factory()->create(['role_id' => $doctorRole->id]);
+        $this->actingAs($doctor, 'sanctum');
+        $this->patchJson("/api/users/{$doctor->id}/role", ['role_id' => $nurseRole->id])->assertForbidden();
+        $this->assertSame($doctorRole->id, $doctor->fresh()->role_id);
+    }
+
+    public function test_staff_creation_cannot_repurpose_an_existing_student_account(): void
+    {
+        $admin = $this->adminUser();
+        $studentRole = Role::firstOrCreate(['name' => 'student'], ['description' => 'Student']);
+        $doctorRole = Role::firstOrCreate(['name' => 'doctor'], ['description' => 'Doctor']);
+        $patient = Patient::factory()->create();
+        $student = User::factory()->create(['role_id' => $studentRole->id, 'patient_id' => $patient->patient_id]);
+        $before = $patient->fresh()->getAttributes();
+        $this->actingAs($admin, 'sanctum')->postJson('/api/users', [
+            'name' => 'Attempted Doctor', 'email' => 'attempted-doctor@example.com',
+            'password' => 'password123', 'password_confirmation' => 'password123',
+            'role_id' => $doctorRole->id, 'student_id' => $patient->patient_id,
+        ])->assertUnprocessable()->assertJsonValidationErrors(['role_id']);
+        $this->assertDatabaseMissing('users', ['email' => 'attempted-doctor@example.com']);
+        $this->assertSame($studentRole->id, $student->fresh()->role_id);
+        $this->assertSame($before, $patient->fresh()->getAttributes());
+    }
+
+    public function test_user_form_sex_options_are_saved_on_the_patient_and_medical_record(): void
+    {
+        $admin = $this->adminUser();
+        $studentRole = Role::firstOrCreate(['name' => 'student'], ['description' => 'Student']);
+        $this->actingAs($admin, 'sanctum');
+        foreach (['Female', 'Male', 'Others'] as $index => $sex) {
+            $storedSex = $sex === 'Others' ? 'Other' : $sex;
+            $response = $this->postJson('/api/users', [
+                'first_name' => 'New', 'last_name' => 'Student', 'email' => "sex-option-{$index}@example.com",
+                'password' => 'password123', 'password_confirmation' => 'password123',
+                'role_id' => $studentRole->id, 'sex' => $sex,
+                'student_id' => '26-00000'.$index,
+            ])->assertCreated()->assertJsonPath('data.patient.sex', $storedSex);
+            $this->assertDatabaseHas('patients', ['patient_id' => $response->json('data.patientId'), 'sex' => $storedSex]);
+            $this->assertDatabaseMissing('medical_records', ['patient_id' => $response->json('data.patientId')]);
+            Patient::where('patient_id', $response->json('data.patientId'))->firstOrFail()->ensureMedicalRecord(); // Existing clinical record fixture.
+            $this->assertDatabaseHas('medical_records', ['patient_id' => $response->json('data.patientId'), 'sex' => $storedSex]);
+            $this->putJson('/api/users/'.$response->json('data.id'), ['sex' => 'Male'])->assertOk()
+                ->assertJsonPath('data.patient.sex', 'Male');
+            $this->putJson('/api/users/'.$response->json('data.id'), ['sex' => 'Invalid'])->assertUnprocessable()
+                ->assertJsonValidationErrors(['sex']);
+        }
+    }
+
     public function test_admin_can_create_user_with_patient_id_linkage(): void
     {
         $admin = $this->adminUser();

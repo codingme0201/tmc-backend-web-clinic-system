@@ -9,7 +9,10 @@ use App\Http\Resources\StaffScheduleResource;
 use App\Models\Appointment;
 use App\Models\StaffSchedule;
 use App\Models\User;
+use App\Services\WeeklyScheduleService;
 use App\Support\ClinicSchedule;
+use App\Support\AppointmentCalendar;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -27,14 +30,16 @@ class StaffScheduleController extends Controller
     public function publicIndex(): JsonResponse
     {
         $today = now()->toDateString();
+        app(WeeklyScheduleService::class)->ensureRange($today, now()->addDays(30)->toDateString());
 
-        $schedules = StaffSchedule::with('user.role')
+        $schedules = StaffSchedule::with(['user.role', 'user.staffProfile'])
             ->where('status', 'Available')
             ->whereBetween('date', [$today, now()->addDays(30)->toDateString()])
             ->whereHas('user', fn ($q) => $q->where('status', 'active'))
             ->orderBy('date')
             ->orderBy('start_time')
-            ->get();
+            ->get()
+            ->filter(fn ($schedule) => app(AppointmentCalendar::class)->reason($schedule->date->format('Y-m-d')) === null);
 
         $data = $schedules->groupBy('user_id')->map(function ($entries) {
             $user = $entries->first()->user;
@@ -43,6 +48,7 @@ class StaffScheduleController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'role' => $user->role?->name,
+                'status' => app(\App\Services\AppointmentScheduler::class)->currentStaffStatus($user),
                 'schedule' => $entries->map(fn ($s) => [
                     'day' => $s->date?->format('l, M j'),
                     'date' => $s->date?->format('Y-m-d'),
@@ -63,7 +69,19 @@ class StaffScheduleController extends Controller
      */
     public function index(Request $request): AnonymousResourceCollection
     {
+        $range = $request->validate([
+            'date' => ['nullable', 'date_format:Y-m-d'],
+            'date_from' => ['nullable', 'date_format:Y-m-d'],
+            'date_to' => ['nullable', 'date_format:Y-m-d'],
+        ]);
+        $from = $range['date'] ?? $range['date_from'] ?? now()->toDateString();
+        $to = $range['date'] ?? $range['date_to'] ?? \Carbon\CarbonImmutable::parse($from)->addDays(35)->toDateString();
+        abort_if(\Carbon\CarbonImmutable::parse($from)->diffInDays($to, true) > 366, 422, 'Please select a date range of at most one year.');
+        app(WeeklyScheduleService::class)->ensureRange($from, $to, $request->user()->isClinician() ? $request->user()->id : null);
         $query = StaffSchedule::with('user.role');
+        if ($request->user()->isClinician()) {
+            $query->where('user_id', $request->user()->id);
+        }
 
         // Filter by specific user
         $userId = $request->query('user_id');
@@ -122,6 +140,8 @@ class StaffScheduleController extends Controller
      */
     public function show(StaffSchedule $schedule): StaffScheduleResource
     {
+        $schedule->ensureAccessibleBy(request()->user());
+
         return new StaffScheduleResource($schedule->load('user.role'));
     }
 
@@ -149,12 +169,17 @@ class StaffScheduleController extends Controller
             ], 422);
         }
 
+        // A manually selected date replaces that day's generated weekly occurrence.
+        $generated = StaffSchedule::where('user_id', $validated['user_id'])->whereDate('date', $validated['date'])
+            ->whereNotNull('weekly_staff_schedule_id')->where('is_override', false)->first();
+
         // Check for scheduling conflicts (overlapping time blocks)
         $conflict = $this->findConflict(
             $validated['user_id'],
             $validated['date'],
             $validated['start_time'],
-            $validated['end_time']
+            $validated['end_time'],
+            $generated?->id
         );
 
         if ($conflict) {
@@ -169,7 +194,8 @@ class StaffScheduleController extends Controller
             $validated['user_id'],
             $validated['date'],
             $validated['start_time'],
-            $validated['end_time']
+            $validated['end_time'],
+            $generated?->id
         );
 
         if ($unavailable) {
@@ -179,7 +205,12 @@ class StaffScheduleController extends Controller
             ], 409);
         }
 
-        $schedule = StaffSchedule::create($validated);
+        if ($generated) {
+            $generated->update([...$validated, 'is_override' => true]);
+            $schedule = $generated;
+        } else {
+            $schedule = StaffSchedule::create([...$validated, 'is_override' => true]);
+        }
 
         return (new StaffScheduleResource($this->attachBookings(collect([$schedule->load('user.role')]))->first()))
             ->response()
@@ -237,7 +268,7 @@ class StaffScheduleController extends Controller
             abort(409, 'This staff member is marked as unavailable for the selected time period.');
         }
 
-        $schedule->update($validated);
+        $schedule->update([...$validated, 'is_override' => true]);
 
         return new StaffScheduleResource($this->attachBookings(collect([$schedule->fresh('user.role')]))->first());
     }
@@ -247,7 +278,17 @@ class StaffScheduleController extends Controller
      */
     public function destroy(StaffSchedule $schedule): JsonResponse
     {
-        $schedule->delete();
+        abort_unless(StaffSchedule::canManageFor(request()->user(), $schedule->user_id), 403);
+        if ($schedule->weekly_staff_schedule_id) {
+            // Remember deleted occurrences so a later calendar read cannot recreate them.
+            \Illuminate\Support\Facades\DB::transaction(function () use ($schedule) {
+                $rule = \App\Models\WeeklyStaffSchedule::whereKey($schedule->weekly_staff_schedule_id)->lockForUpdate()->first();
+                if ($rule) $rule->update(['excluded_dates' => array_values(array_unique([...($rule->excluded_dates ?? []), $schedule->date->toDateString()]))]);
+                $schedule->delete();
+            });
+        } else {
+            $schedule->delete();
+        }
 
         return response()->json(['message' => 'Schedule deleted successfully.']);
     }
@@ -259,7 +300,10 @@ class StaffScheduleController extends Controller
         UpdateStaffAvailabilityRequest $request,
         StaffSchedule $schedule,
     ): StaffScheduleResource {
-        $schedule->update(['status' => $request->validated('status')]);
+        if ($request->validated('status') === 'Available' && ($reason = app(AppointmentCalendar::class)->reason($schedule->date->format('Y-m-d')))) {
+            throw ValidationException::withMessages(['status' => $reason]);
+        }
+        $schedule->update(['status' => $request->validated('status'), 'is_override' => true]);
 
         return new StaffScheduleResource($schedule->fresh('user.role'));
     }

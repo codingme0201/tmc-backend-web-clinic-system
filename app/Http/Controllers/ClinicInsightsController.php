@@ -6,14 +6,14 @@ use App\Models\Appointment;
 use App\Models\Consultation;
 use App\Models\MedicalCertificate;
 use App\Models\Prescription;
+use App\Support\AppointmentCalendar;
 use App\Support\ClinicSchedule;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 
 /**
- * Dashboard insights computed from the clinic's live records. Totals cover
- * every record (so the charts are never empty while records exist); each
- * row also carries the count for the last 30 days (today included).
+ * Dashboard insights computed from the clinic's live records.
  */
 class ClinicInsightsController extends Controller
 {
@@ -36,7 +36,7 @@ class ClinicInsightsController extends Controller
     public function activity(): JsonResponse
     {
         $sources = [
-            'Appointments' => [fn () => Appointment::whereNotIn('status', ['Cancelled', 'Rejected']), 'date'],
+            'Appointments' => [fn () => Appointment::whereNotIn('status', ['Cancelled', 'Rejected', 'Expired', 'No-Show']), 'date'],
             'Consultations' => [fn () => Consultation::query(), 'date'],
             'Prescriptions' => [fn () => Prescription::query(), 'prescription_date'],
             'Medical Certificates' => [fn () => MedicalCertificate::query(), 'issue_date'],
@@ -54,14 +54,25 @@ class ClinicInsightsController extends Controller
     }
 
     /**
-     * Peak visit hours: { label, count, recentCount, percent } per hour band.
+     * Peak visit hours for the current Monday-Friday school week, excluding holidays.
      * Visits are booked appointments (not cancelled or rejected) plus walk-in
      * consultations that were not started from an appointment.
      */
-    public function peakHours(): JsonResponse
+    public function peakHours(AppointmentCalendar $calendar): JsonResponse
     {
-        $visits = Appointment::whereNotIn('status', ['Cancelled', 'Rejected'])->get(['time', 'date'])->toBase()
-            ->concat(Consultation::whereNull('appointment_id')->get(['time', 'date'])->all())
+        $monday = now()->startOfWeek(CarbonInterface::MONDAY);
+        $schoolDates = [];
+        for ($offset = 0; $offset < 5; $offset++) {
+            $day = $monday->copy()->addDays($offset);
+            $date = $day->toDateString();
+            if (! array_key_exists($date, $calendar->holidays($day->year))) {
+                $schoolDates[] = $date;
+            }
+        }
+
+        $visits = Appointment::whereIn('date', $schoolDates)
+            ->whereNotIn('status', ['Cancelled', 'Rejected', 'Expired', 'No-Show'])->get(['time', 'date'])->toBase()
+            ->concat(Consultation::whereIn('date', $schoolDates)->whereNull('appointment_id')->get(['time', 'date'])->all())
             ->map(fn ($visit) => [
                 'minutes' => ClinicSchedule::toMinutes($visit->time),
                 'recent' => $visit->date?->format('Y-m-d') >= $this->recentFrom(),

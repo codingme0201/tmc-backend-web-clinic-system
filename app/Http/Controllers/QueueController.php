@@ -43,6 +43,9 @@ class QueueController extends Controller
         $date = $validated['date'] ?? now()->toDateString();
 
         $entries = $this->entriesFor($date);
+        if ($request->user()->role?->name === 'doctor') {
+            $entries = $entries->filter(fn (Appointment $entry) => (int) $entry->staff_id === (int) $request->user()->id)->values();
+        }
 
         return response()->json([
             'data' => QueueEntryResource::collection($entries)->resolve(),
@@ -61,8 +64,9 @@ class QueueController extends Controller
      * Check a patient in: they join the end of the waiting line with the
      * next queue number for the day.
      */
-    public function checkIn(Appointment $appointment): JsonResponse
+    public function checkIn(Appointment $appointment, Request $request): JsonResponse
     {
+        $appointment->ensureAccessibleBy($request->user());
         if ($appointment->status !== 'Approved') {
             return response()->json([
                 'message' => 'Only approved appointments can be checked in. Approve the appointment first.',
@@ -92,8 +96,9 @@ class QueueController extends Controller
     /**
      * Undo a check-in made by mistake (only while the patient is waiting).
      */
-    public function undoCheckIn(Appointment $appointment): JsonResponse
+    public function undoCheckIn(Appointment $appointment, Request $request): JsonResponse
     {
+        $appointment->ensureAccessibleBy($request->user());
         if (! $appointment->checked_in_at) {
             return response()->json(['message' => 'This patient is not checked in.'], 422);
         }
@@ -117,6 +122,7 @@ class QueueController extends Controller
      */
     public function serve(Request $request, Appointment $appointment): JsonResponse
     {
+        $appointment->ensureAccessibleBy($request->user());
         $date = $appointment->date->format('Y-m-d');
         $entries = $this->entriesFor($date);
         $entry = $entries->firstWhere('id', $appointment->id);

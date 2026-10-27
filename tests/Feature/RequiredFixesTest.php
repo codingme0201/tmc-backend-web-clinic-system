@@ -119,15 +119,37 @@ class RequiredFixesTest extends TestCase
         $this->patchJson('/api/staff/status', ['name' => 'Dr. Rejected', 'status' => 'On duty'])->assertUnprocessable();
     }
 
+    public function test_only_admin_can_change_dashboard_staff_status_even_with_schedule_permissions(): void
+    {
+        $doctor = $this->clinician('doctor', 'Dr. Read Only');
+        StaffSchedule::create(['user_id' => $doctor->id, 'date' => now()->toDateString(), 'start_time' => '08:00 AM', 'end_time' => '12:00 PM', 'status' => 'Available']);
+
+        foreach (['doctor', 'nurse', 'front_desk', 'custom_staff'] as $roleName) {
+            $role = $this->roleWith($roleName, ['schedules.view', 'schedules.update']);
+            $viewer = User::factory()->create(['role_id' => $role->id, 'status' => 'active']);
+            $this->actingAs($viewer, 'sanctum');
+
+            $this->getJson('/api/staff')->assertOk()->assertJsonFragment(['name' => $doctor->name, 'status' => 'On duty']);
+            $this->patchJson('/api/staff/status', ['user_id' => $doctor->id, 'status' => 'Break'])->assertForbidden();
+            $this->patchJson('/api/staff/status', ['name' => $doctor->name, 'status' => 'Off duty'])->assertForbidden();
+            $this->assertDatabaseMissing('staff', ['user_id' => $doctor->id]);
+        }
+
+        $this->actingAs($this->admin(), 'sanctum')
+            ->patchJson('/api/staff/status', ['user_id' => $doctor->id, 'status' => 'Break'])
+            ->assertOk()->assertJsonPath('data.status', 'Break');
+        $this->assertDatabaseHas('staff', ['user_id' => $doctor->id, 'status' => 'Break']);
+    }
+
     // --- Dashboard: clinic activity and peak hours ----------------------------------------------
 
     public function test_clinic_activity_and_peak_hours_come_from_clinic_records(): void
     {
-        $this->appointment(['time' => '08:30 AM']);
-        $this->appointment(['time' => '09:00 AM']);
+        $this->appointment(['time' => '08:30 AM', 'status' => 'Completed']);
+        $this->appointment(['time' => '09:00 AM', 'status' => 'Completed']);
         $this->appointment(['time' => '02:30 PM']);
         $this->appointment(['time' => '03:00 PM', 'status' => 'Rejected']);
-        $this->appointment(['time' => '09:30 AM', 'date' => now()->subDays(60)->toDateString()]);
+        $this->appointment(['time' => '09:30 AM', 'date' => now()->subDays(60)->toDateString(), 'status' => 'Completed']);
         Consultation::create(['reference' => 'CONS-2026-700', 'date' => now()->toDateString(), 'time' => '10:30 AM', 'patient' => 'Walk In', 'status' => 'Completed']);
 
         $this->actingAs($this->admin(), 'sanctum');
@@ -139,11 +161,58 @@ class RequiredFixesTest extends TestCase
         $this->assertSame(100, $activity['Appointments']['percent']);
 
         $peak = collect($this->getJson('/api/insights/peak-hours')->assertOk()->json())->keyBy('label');
-        $this->assertSame(3, $peak['08:00 AM - 10:00 AM']['count']);
+        $this->assertSame(2, $peak['08:00 AM - 10:00 AM']['count']);
         $this->assertSame(2, $peak['08:00 AM - 10:00 AM']['recentCount']);
         $this->assertSame(1, $peak['10:00 AM - 12:00 PM']['count']);
         $this->assertSame(1, $peak['02:00 PM - 04:00 PM']['count']);
         $this->assertSame(100, $peak['08:00 AM - 10:00 AM']['percent']);
+    }
+
+    public function test_peak_hours_use_the_current_school_week_and_exclude_holidays_and_duplicate_visits(): void
+    {
+        $this->travelTo(Carbon::parse('2026-10-25 12:00:00')); // Sunday still belongs to Oct 19-23.
+        config(['appointment_calendar.holidays.2026.2026-10-21' => 'School Holiday']);
+
+        $appointment = $this->appointment(['date' => '2026-10-19', 'time' => '08:00 AM', 'status' => 'Completed']);
+        $this->appointment(['date' => '2026-10-23', 'time' => '05:00 PM', 'status' => 'Completed']);
+        foreach (['2026-10-16', '2026-10-18', '2026-10-21', '2026-10-24', '2026-10-25', '2026-10-26'] as $index => $date) {
+            $this->appointment(['date' => $date, 'time' => '08:30 AM', 'status' => 'Completed']);
+            Consultation::create(['reference' => "CONS-EXCLUDED-{$index}", 'date' => $date, 'time' => '10:00 AM', 'patient' => 'Excluded', 'status' => 'Completed']);
+        }
+        foreach (['Cancelled', 'Rejected', 'Expired', 'No-Show'] as $status) {
+            $this->appointment(['date' => '2026-10-20', 'time' => '08:30 AM', 'status' => $status]);
+        }
+        Consultation::create(['reference' => 'CONS-LINKED', 'appointment_id' => $appointment->id, 'date' => '2026-10-19', 'time' => '08:30 AM', 'patient' => 'Linked', 'status' => 'Completed']);
+        foreach (['10:00 AM', '12:00 PM', '02:00 PM', '04:00 PM'] as $index => $time) {
+            Consultation::create(['reference' => "CONS-WALKIN-{$index}", 'date' => '2026-10-20', 'time' => $time, 'patient' => 'Walk In', 'status' => 'In Progress']);
+        }
+
+        $this->actingAs($this->admin(), 'sanctum');
+        $rows = $this->getJson('/api/insights/peak-hours')->assertOk()->json();
+        $this->assertSame([1, 1, 1, 1, 2], array_column($rows, 'count'));
+        $this->assertSame([50, 50, 50, 50, 100], array_column($rows, 'percent'));
+
+        $this->travelTo(Carbon::parse('2026-10-26 00:00:00')); // New Monday resets the week.
+        $rows = $this->getJson('/api/insights/peak-hours')->assertOk()->json();
+        $this->assertSame([1, 1, 0, 0, 0], array_column($rows, 'count'));
+    }
+
+    public function test_peak_hours_handle_a_school_week_spanning_two_years_and_empty_weeks(): void
+    {
+        $this->travelTo(Carbon::parse('2027-01-03 12:00:00'));
+        $this->appointment(['date' => '2026-12-28', 'time' => '09:00 AM', 'status' => 'Completed']);
+        $this->appointment(['date' => '2026-12-29', 'time' => '10:00 AM', 'status' => 'Completed']);
+        foreach (['2026-12-30', '2026-12-31', '2027-01-01'] as $date) {
+            $this->appointment(['date' => $date, 'time' => '09:00 AM', 'status' => 'Completed']);
+        }
+        $this->actingAs($this->admin(), 'sanctum');
+        $rows = $this->getJson('/api/insights/peak-hours')->assertOk()->json();
+        $this->assertSame([1, 1, 0, 0, 0], array_column($rows, 'count'));
+
+        $this->travelTo(Carbon::parse('2027-01-04 00:00:00'));
+        $rows = $this->getJson('/api/insights/peak-hours')->assertOk()->json();
+        $this->assertSame([0, 0, 0, 0, 0], array_column($rows, 'count'));
+        $this->assertSame([0, 0, 0, 0, 0], array_column($rows, 'percent'));
     }
 
     // --- Medical staff: rejected applications ------------------------------------------------------
@@ -178,11 +247,14 @@ class RequiredFixesTest extends TestCase
 
     // --- Appointments / consultations: department-matched doctors ---------------------------
 
-    public function test_doctor_selection_follows_the_visit_department(): void
+    public function test_doctor_and_nurse_selection_follows_the_visit_department(): void
     {
         $dentist = $this->clinician('doctor', 'Dr. Dentist', ['license_type' => 'PRC Dentist License', 'specialization' => 'General Dentistry']);
         $physician = $this->clinician('doctor', 'Dr. Physician', ['license_type' => 'PRC Physician License']);
         $nurse = $this->clinician('nurse', 'Nurse Helper');
+        foreach ([$dentist, $physician, $nurse] as $member) {
+            StaffSchedule::create(['user_id' => $member->id, 'date' => now()->toDateString(), 'start_time' => '08:00 AM', 'end_time' => '05:00 PM', 'status' => 'Available']);
+        }
         $dental = $this->appointment(['type' => 'Dental concern']);
         $checkUp = $this->appointment(['type' => 'Check-up', 'time' => '01:00 PM']);
         $this->actingAs($this->admin(), 'sanctum');
@@ -192,7 +264,7 @@ class RequiredFixesTest extends TestCase
         $this->patchJson("/api/appointments/{$dental->id}/assign", ['staff_id' => $dentist->id])->assertOk();
         $this->patchJson("/api/appointments/{$checkUp->id}/assign", ['staff_id' => $dentist->id])->assertUnprocessable();
         $this->patchJson("/api/appointments/{$checkUp->id}/assign", ['staff_id' => $nurse->id])
-            ->assertUnprocessable()->assertJsonPath('message', 'Please select an active doctor.');
+            ->assertOk()->assertJsonPath('data.staffId', $nurse->id)->assertJsonPath('data.staffRole', 'nurse');
 
         $this->postJson('/api/consultations', ['patient' => 'Dental Patient', 'type' => 'Dental concern', 'staff_id' => $physician->id])
             ->assertUnprocessable()->assertJsonValidationErrors(['staff_id']);
@@ -209,7 +281,41 @@ class RequiredFixesTest extends TestCase
         $this->assertSame('General Medicine', $eligible[$physician->id]['staffProfile']['department']);
     }
 
-    public function test_calling_in_an_unassigned_patient_only_self_assigns_within_the_department(): void
+    public function test_booking_and_assignment_accept_only_eligible_nurses_of_the_service_department(): void
+    {
+        $dentalNurse = $this->clinician('nurse', 'Dental Nurse', ['specialization' => 'Dental Nursing', 'license_type' => 'PRC Nurse License']);
+        $medicalNurse = $this->clinician('nurse', 'Medical Nurse', ['license_type' => 'PRC Nurse License']);
+        $rejected = $this->clinician('nurse', 'Rejected Nurse', ['specialization' => 'Dental Nursing', 'credential_status' => 'Rejected']);
+        $inactive = $this->clinician('nurse', 'Inactive Nurse', ['specialization' => 'Dental Nursing']);
+        $inactive->update(['status' => 'inactive']);
+        $dental = $this->appointment(['type' => 'Dental concern']);
+        $this->actingAs($this->admin(), 'sanctum');
+
+        $payload = [
+            'patient' => 'Medical Booking', 'patient_id' => Patient::factory()->create(['name' => 'Medical Booking'])->patient_id, 'type' => 'General Check-up', 'reason' => 'Medical recheck',
+            'date' => now()->addDays(2)->toDateString(), 'time' => '09:30 AM',
+        ];
+        StaffSchedule::create(['user_id' => $medicalNurse->id, 'date' => $payload['date'], 'start_time' => '08:00 AM', 'end_time' => '05:00 PM', 'status' => 'Available']);
+        StaffSchedule::create(['user_id' => $dentalNurse->id, 'date' => now()->toDateString(), 'start_time' => '08:00 AM', 'end_time' => '05:00 PM', 'status' => 'Available']);
+        foreach ([$dentalNurse, $rejected, $inactive] as $ineligible) {
+            $this->postJson('/api/appointments', [...$payload, 'staff_id' => $ineligible->id])
+                ->assertUnprocessable()->assertJsonValidationErrors(['staff_id']);
+        }
+        foreach ([$medicalNurse, $rejected, $inactive] as $ineligible) {
+            $this->patchJson("/api/appointments/{$dental->id}/assign", ['staff_id' => $ineligible->id])
+                ->assertUnprocessable()->assertJsonValidationErrors(['staff_id']);
+        }
+        $this->postJson('/api/appointments', [...$payload, 'staff_id' => $medicalNurse->id])
+            ->assertCreated()->assertJsonPath('data.staffId', $medicalNurse->id)->assertJsonPath('data.staffRole', 'nurse');
+        $this->patchJson("/api/appointments/{$dental->id}/assign", ['staff_id' => $dentalNurse->id])
+            ->assertOk()->assertJsonPath('data.staffId', $dentalNurse->id);
+        $this->postJson('/api/appointments', [...$payload, 'type' => 'Follow-up Consultation', 'time' => '10:30 AM', 'staff_id' => $medicalNurse->id])
+            ->assertCreated()->assertJsonPath('data.staffId', $medicalNurse->id);
+        $this->postJson('/api/appointments', [...$payload, 'type' => 'Follow-up Consultation', 'staff_id' => $dentalNurse->id])
+            ->assertUnprocessable()->assertJsonValidationErrors(['staff_id']);
+    }
+
+    public function test_doctor_can_only_call_in_patients_after_assignment(): void
     {
         $this->roleWith('doctor', ['consultations.create']);
         $dentist = $this->clinician('doctor', 'Dr. Tooth', ['license_type' => 'PRC Dentist License']);
@@ -217,9 +323,12 @@ class RequiredFixesTest extends TestCase
         $dental = $this->appointment(['type' => 'Dental concern', 'status' => 'Approved', 'queue_number' => 2, 'checked_in_at' => now(), 'time' => '01:00 PM']);
 
         $this->actingAs($dentist, 'sanctum');
-        $this->postJson("/api/queue/{$checkUp->id}/serve")->assertCreated();
+        $this->postJson("/api/queue/{$checkUp->id}/serve")->assertForbidden();
         $this->assertNull($checkUp->fresh()->staff_id);
 
+        $this->postJson("/api/queue/{$dental->id}/serve")->assertForbidden();
+        $this->assertNull($dental->fresh()->staff_id);
+        $dental->update(['staff_id' => $dentist->id, 'staff' => $dentist->name]);
         $this->postJson("/api/queue/{$dental->id}/serve")->assertCreated()->assertJsonPath('data.type', 'Dental concern');
         $this->assertSame($dentist->id, $dental->fresh()->staff_id);
     }

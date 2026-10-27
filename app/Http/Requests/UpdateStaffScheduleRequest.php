@@ -4,21 +4,20 @@ namespace App\Http\Requests;
 
 use App\Models\StaffSchedule;
 use App\Support\ClinicSchedule;
+use App\Support\AppointmentCalendar;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class UpdateStaffScheduleRequest extends FormRequest
 {
-    /**
-     * Determine if the user is authorized to make this request.
-     *
-     * Authorization is handled by the route-level `permission:schedules.update`
-     * middleware — this method always returns true following the project
-     * convention.
-     */
     public function authorize(): bool
     {
-        return true;
+        $schedule = $this->route('schedule');
+        if ($schedule && ! StaffSchedule::canManageFor($this->user(), $schedule->user_id)) {
+            return false;
+        }
+
+        return StaffSchedule::canManageFor($this->user(), (int) $this->input('user_id', $schedule?->user_id ?? 0));
     }
 
     /**
@@ -28,8 +27,6 @@ class UpdateStaffScheduleRequest extends FormRequest
      */
     public function rules(): array
     {
-        $scheduleId = $this->route('schedule')?->id;
-
         return [
             'user_id' => ['sometimes', 'integer', 'exists:users,id'],
             'date' => ['sometimes', 'date', 'date_format:Y-m-d'],
@@ -68,6 +65,11 @@ class UpdateStaffScheduleRequest extends FormRequest
     public function withValidator($validator): void
     {
         $validator->after(function ($validator) {
+            $date = $this->input('date', $this->route('schedule')?->date?->format('Y-m-d'));
+            if ($date && ! $validator->errors()->has('date') && ($reason = app(AppointmentCalendar::class)->reason($date))) {
+                $validator->errors()->add('date', $reason);
+            }
+
             $start = ClinicSchedule::toMinutes($this->start_time ?? $this->route('schedule')?->start_time);
             $end = ClinicSchedule::toMinutes($this->end_time ?? $this->route('schedule')?->end_time);
 

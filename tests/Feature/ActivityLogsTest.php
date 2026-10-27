@@ -82,6 +82,28 @@ class ActivityLogsTest extends TestCase
         ]);
     }
 
+    public function test_dashboard_admin_feed_filters_before_limiting_and_includes_live_admin_actions(): void
+    {
+        $admin = $this->userWithPermissions(['audit_logs.view'], 'admin');
+        $nurse = $this->userWithPermissions([], 'nurse');
+        $first = ActivityLog::record($admin, 'Updated staff status', 'Dashboard');
+        foreach (range(1, 55) as $index) ActivityLog::record($nurse, 'Staff action '.$index, 'Consultations');
+        ActivityLog::record(null, 'System action', 'System');
+        $this->actingAs($admin, 'sanctum');
+        $this->getJson('/api/activity-logs?role=admin&limit=1')->assertOk()->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $first->id)->assertJsonPath('data.0.role', 'admin');
+        $before = $this->getJson('/api/sync')->assertOk()->json('data.activity_logs');
+        $latest = ActivityLog::record($admin, 'Approved an appointment', 'Appointments');
+        $after = $this->getJson('/api/sync')->assertOk()->json('data.activity_logs');
+        $this->assertNotSame($before, $after);
+        $this->getJson('/api/activity-logs?role=admin')->assertOk()->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.id', $latest->id)->assertJsonPath('data.1.id', $first->id);
+        // The full Audit Logs module retains staff and system actions.
+        $this->getJson('/api/activity-logs?limit=100')->assertOk()->assertJsonCount(58, 'data');
+        $this->actingAs($nurse, 'sanctum');
+        $this->getJson('/api/activity-logs?role=admin')->assertForbidden();
+    }
+
     public function test_user_with_permission_can_list_activity_logs(): void
     {
         $authorizedUser = $this->userWithPermissions(['audit_logs.view'], 'admin');

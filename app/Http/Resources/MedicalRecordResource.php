@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\MedicalRecordProvenance;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -27,7 +28,7 @@ class MedicalRecordResource extends JsonResource
             'patientId' => $this->patient_id,
             'name' => $patient?->name ?: $this->name,
             'age' => $age,
-            'sex' => $this->sex,
+            'sex' => $patient?->sex ?? $this->sex,
             'type' => $patient?->type ?: $this->type,
             'courseDept' => $patient?->course_dept ?: $this->course_dept,
             'contact' => $patient?->contact ?: ($this->contact ?? ''),
@@ -39,6 +40,7 @@ class MedicalRecordResource extends JsonResource
                 'middleName' => $patient->middle_name ?? '',
                 'lastName' => $patient->last_name ?? '',
                 'age' => $patient->age,
+                'sex' => $patient->sex,
                 'courseDept' => $patient->course_dept ?? '',
                 'block' => $patient->block ?? '',
                 'address' => $patient->address ?? '',
@@ -54,6 +56,7 @@ class MedicalRecordResource extends JsonResource
             ] : null,
             'status' => $this->status,
             'lastUpdated' => $this->last_updated?->format('Y-m-d') ?? ($this->updated_at?->format('Y-m-d') ?? now()->toDateString()),
+            ...MedicalRecordProvenance::forRecord($this->resource, $request),
             'medicalHistory' => $this->histories->map(fn ($h) => [
                 'id' => (string) $h->id,
                 'date' => $h->date?->format('Y-m-d') ?? '',

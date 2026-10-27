@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 
 #[Fillable([
     'patient_id', 'name', 'first_name', 'middle_name', 'last_name',
-    'age', 'type', 'course_dept', 'block', 'address', 'nationality',
+    'age', 'sex', 'type', 'course_dept', 'block', 'address', 'nationality',
     'contact', 'emergency_contact', 'emergency_contact_name', 'emergency_contact_phone',
     'allergies', 'history', 'status',
 ])]
@@ -32,7 +32,7 @@ class Patient extends Model
         // Keep the medical record's demographic copy in step with whatever
         // the student (mobile app) or staff (web) last saved on the profile.
         static::saved(function (Patient $patient) {
-            if (! $patient->wasChanged(['name', 'age', 'type', 'course_dept', 'contact', 'emergency_contact', 'patient_id']) && ! $patient->wasRecentlyCreated) {
+            if (! $patient->wasChanged(['name', 'age', 'sex', 'type', 'course_dept', 'contact', 'emergency_contact', 'patient_id']) && ! $patient->wasRecentlyCreated) {
                 return;
             }
 
@@ -40,6 +40,7 @@ class Patient extends Model
                 ->update([
                     'name' => $patient->name,
                     'age' => $patient->age ?? 0,
+                    ...($patient->sex !== null || $patient->wasChanged('sex') ? ['sex' => $patient->sex ?? 'Unspecified'] : []),
                     'type' => $patient->type ?: 'Student',
                     'course_dept' => $patient->course_dept ?? '',
                     'contact' => $patient->contact,
@@ -110,12 +111,15 @@ class Patient extends Model
                 $model::where('patient_id', $oldId)->update(['patient_id' => $newId]);
             }
             $this->update(['patient_id' => $newId]);
+            // Bulk updates bypass model observers. Refresh every affected
+            // web/mobile list so cached records use the same Student ID.
+            SyncState::bump('appointments', 'consultations', 'medical_certificates', 'prescriptions', 'medical_records', 'users');
         });
     }
 
     /**
-     * Return the patient's medical record, creating an empty one if missing,
-     * so staff can always add conditions, allergies, medications and history.
+     * Return the patient's medical record, creating it if missing. Runtime
+     * creation is called only after saving a completed, checked-in visit.
      */
     public function ensureMedicalRecord(): MedicalRecord
     {
@@ -124,7 +128,7 @@ class Patient extends Model
             [
                 'name' => $this->name,
                 'age' => $this->age ?? 0,
-                'sex' => 'Unspecified',
+                'sex' => $this->sex ?? 'Unspecified',
                 'type' => $this->type ?: 'Student',
                 'course_dept' => $this->course_dept ?? '',
                 'contact' => $this->contact,

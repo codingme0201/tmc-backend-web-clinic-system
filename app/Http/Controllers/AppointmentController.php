@@ -10,10 +10,12 @@ use App\Http\Resources\AppointmentResource;
 use App\Models\Appointment;
 use App\Models\Consultation;
 use App\Models\Notification;
+use App\Models\Patient;
 use App\Models\SystemSetting;
 use App\Models\User;
 use App\Services\AppointmentScheduler;
 use App\Support\ClinicDepartments;
+use App\Support\ClinicSchedule;
 use Illuminate\Http\JsonResponse;
 use App\Support\SyncState;
 use Illuminate\Http\Request;
@@ -175,6 +177,7 @@ class AppointmentController extends Controller
         $staff = ! empty($validated['staff_id'])
             ? $this->scheduler->clinicians()->find($validated['staff_id'])
             : null;
+        abort_if(! empty($validated['staff_id']) && ! $staff, 422, 'Doctor not available');
 
         return response()->json([
             'data' => [
@@ -277,7 +280,7 @@ class AppointmentController extends Controller
             abort(403, 'You do not have permission to cancel this appointment.');
         }
 
-        if (in_array($appointment->status, ['Completed', 'Cancelled', 'No-Show'], true)) {
+        if (in_array($appointment->status, ['Completed', 'Cancelled', 'No-Show', 'Expired'], true)) {
             return response()->json([
                 'message' => "Appointments in \"{$appointment->status}\" status cannot be cancelled.",
             ], 422);
@@ -301,11 +304,14 @@ class AppointmentController extends Controller
 
     /**
      * List appointments, optionally filtered by search/status/date/visit type,
-     * in first-in-first-out order (date, time slot, check-in, booking time).
+     * with new requests first and approved appointments in schedule order.
      */
     public function index(Request $request): AnonymousResourceCollection
     {
         $query = Appointment::with(self::DETAIL_RELATIONS);
+        if ($request->user()->role?->name === 'doctor') {
+            $query->where('staff_id', $request->user()->id);
+        }
 
         $search = trim((string) $request->query('search', ''));
         if ($search !== '') {
@@ -336,7 +342,19 @@ class AppointmentController extends Controller
             $query->where('staff_id', $staffId);
         }
 
-        return AppointmentResource::collection(Appointment::sortFifo($query->get()));
+        $appointments = $query->get()->sortBy(fn (Appointment $appointment) => [
+            match ($appointment->status) {
+                'Pending', 'Under Review', 'Rescheduled' => 0,
+                'Approved' => 1,
+                default => 2,
+            },
+            $appointment->status === 'Approved' ? $appointment->date?->format('Y-m-d') : '',
+            $appointment->status === 'Approved' ? ClinicSchedule::toMinutes($appointment->time) : 0,
+            -($appointment->created_at?->getTimestamp() ?? 0),
+            -$appointment->id,
+        ])->values();
+
+        return AppointmentResource::collection($appointments);
     }
 
     /**
@@ -372,8 +390,9 @@ class AppointmentController extends Controller
     /**
      * Show a single appointment.
      */
-    public function show(Appointment $appointment): AppointmentResource
+    public function show(Appointment $appointment, Request $request): AppointmentResource
     {
+        $appointment->ensureAccessibleBy($request->user());
         return new AppointmentResource($appointment->load(self::DETAIL_RELATIONS));
     }
 
@@ -383,11 +402,13 @@ class AppointmentController extends Controller
     public function store(StoreAppointmentRequest $request): JsonResponse
     {
         $validated = $request->validated();
+        $patient = Patient::where('patient_id', $validated['patient_id'])->firstOrFail();
+        $validated['patient'] = $patient->name;
 
         $staffUser = null;
         if (! empty($validated['staff_id'])) {
             $staffUser = User::with(['role', 'staffProfile'])->find($validated['staff_id']);
-            if ($message = $this->scheduler->staffAssignmentError($staffUser, $validated['type'], doctorsOnly: true)) {
+            if ($message = $this->scheduler->staffAssignmentError($staffUser, $validated['type'])) {
                 return $this->invalidStaffResponse($message);
             }
         } elseif (! empty($validated['staff'])) {
@@ -419,7 +440,8 @@ class AppointmentController extends Controller
         // Locked reference generation inside a transaction so concurrent
         // bookings can never produce a duplicate reference.
         $appointment = DB::transaction(fn () => Appointment::create([
-            ...$request->safe(['patient', 'patient_id', 'type', 'reason', 'date', 'time']),
+            ...$request->safe(['patient_id', 'type', 'reason', 'date', 'time']),
+            'patient' => $patient->name,
             'visit_type' => Appointment::resolveVisitType($validated['visit_type'] ?? null, $validated['type'], $previous?->id),
             'previous_consultation_id' => $previous?->id,
             'staff' => $staffName,
@@ -447,6 +469,7 @@ class AppointmentController extends Controller
      */
     public function assign(Appointment $appointment, AssignAppointmentStaffRequest $request): AppointmentResource|JsonResponse
     {
+        $appointment->ensureAccessibleBy($request->user());
         if (! in_array($appointment->status, Appointment::ACTIVE_STATUSES, true)) {
             return response()->json([
                 'message' => "A doctor cannot be assigned to an appointment in \"{$appointment->status}\" status.",
@@ -458,7 +481,7 @@ class AppointmentController extends Controller
 
         if ($staffId) {
             $staffUser = User::with(['role', 'staffProfile'])->find($staffId);
-            if ($message = $this->scheduler->staffAssignmentError($staffUser, $appointment->type, doctorsOnly: true)) {
+            if ($message = $this->scheduler->staffAssignmentError($staffUser, $appointment->type)) {
                 return $this->invalidStaffResponse($message);
             }
 
@@ -514,6 +537,7 @@ class AppointmentController extends Controller
      */
     public function updateStatus(Appointment $appointment, UpdateAppointmentStatusRequest $request): AppointmentResource|JsonResponse
     {
+        $appointment->ensureAccessibleBy($request->user());
         $status = $request->validated('status');
         if ($status === 'Confirmed') {
             $status = 'Approved';
@@ -548,6 +572,7 @@ class AppointmentController extends Controller
      */
     public function reschedule(Appointment $appointment, RescheduleAppointmentRequest $request): AppointmentResource|JsonResponse
     {
+        $appointment->ensureAccessibleBy($request->user());
         if (! in_array($appointment->status, ['Pending', 'Under Review', 'Approved'], true)) {
             return response()->json([
                 'message' => "Appointments in \"{$appointment->status}\" status cannot be rescheduled.",

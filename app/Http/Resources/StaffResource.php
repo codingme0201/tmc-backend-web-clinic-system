@@ -19,6 +19,7 @@ class StaffResource extends JsonResource
             'id' => $this->id,
             'userId' => $this->user_id,
             'name' => $this->name,
+            'profilePictureUrl' => $this->profile_picture_url,
             'role' => $this->role,
             'department' => $this->department,
             'shift' => $this->shift,

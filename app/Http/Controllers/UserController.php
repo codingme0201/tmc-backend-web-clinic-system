@@ -76,6 +76,16 @@ class UserController extends Controller
         $middleName = $validated['middleName'] ?? $validated['middle_name'] ?? null;
         $lastName = $validated['lastName'] ?? $validated['last_name'] ?? null;
         $studentId = $validated['studentId'] ?? $validated['student_id'] ?? ($validated['patient_id'] ?? null);
+        $isPatientRole = in_array(Role::findOrFail($validated['role_id'])->name, User::PATIENT_ROLES, true);
+        if ($isPatientRole && ! $studentId) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['studentId' => ['Enter the existing TMC Student ID in 00-000000 format.']]);
+        }
+        if (! $isPatientRole && $studentId) {
+            return response()->json([
+                'message' => 'Student or patient identifiers can only be assigned to student/patient accounts.',
+                'errors' => ['role_id' => ['Choose a student/patient role for a patient account.']],
+            ], 422);
+        }
 
         $name = $validated['name'] ?? null;
         if (! $name && $firstName && $lastName) {
@@ -97,10 +107,9 @@ class UserController extends Controller
 
         $user->load('role');
 
-        // If user is a student or student fields were provided, create or update the Patient record
-        $isStudentRole = $user->role && in_array($user->role->name, ['student', 'patient']);
-        if ($isStudentRole || $studentId || $firstName) {
-            $patientId = $studentId ?: ($user->patient_id ?: Patient::generatePlaceholderId());
+        // Staff accounts must never be created by repurposing a patient profile.
+        if ($isPatientRole) {
+            $patientId = $studentId;
             $course = $validated['course'] ?? $validated['courseDept'] ?? $validated['course_dept'] ?? 'General';
             $phone = $validated['phone'] ?? $validated['contact'] ?? null;
             $emergName = $validated['emergencyContactName'] ?? $validated['emergency_contact_name'] ?? null;
@@ -112,6 +121,7 @@ class UserController extends Controller
             $patient->middle_name = $middleName;
             $patient->last_name = $lastName;
             if (isset($validated['age'])) $patient->age = $validated['age'];
+            if (isset($validated['sex'])) $patient->sex = $validated['sex'] === 'Others' ? 'Other' : $validated['sex'];
             $patient->type = 'Student';
             $patient->course_dept = $course;
             if (isset($validated['block'])) $patient->block = $validated['block'];
@@ -125,7 +135,6 @@ class UserController extends Controller
             }
             $patient->status = $user->status === 'inactive' ? 'Inactive' : 'Active';
             $patient->save();
-            $patient->ensureMedicalRecord();
 
             $user->update(['patient_id' => $patient->patient_id]);
         }
@@ -156,6 +165,15 @@ class UserController extends Controller
         // Resolve the currently linked patient before anything changes, so a
         // student ID edit renames that record instead of creating a new one.
         $originalPatient = $user->patient;
+        if ($user->isPatientUser() && ! $studentId && ! $user->patient_id) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['studentId' => ['Enter the existing TMC Student ID in 00-000000 format.']]);
+        }
+        if (! $user->isPatientUser() && $studentId && $studentId !== $user->patient_id) {
+            return response()->json([
+                'message' => 'Patient identifiers cannot be assigned to staff accounts.',
+                'errors' => ['studentId' => ['Use a student/patient account for patient information.']],
+            ], 422);
+        }
 
         if ($studentId && $studentId !== $user->patient_id) {
             if ($conflict = $this->studentIdConflict($studentId, $user, $originalPatient)) {
@@ -170,10 +188,10 @@ class UserController extends Controller
 
         $user->load('role');
 
-        // If user has a patient or has student role or detailed fields provided
+        // Only patient accounts or an existing patient link may update patient records.
         $isStudentRole = $user->role && in_array($user->role->name, ['student', 'patient']);
-        if ($isStudentRole || $user->patient_id || $studentId || $firstName) {
-            $patientId = $studentId ?: ($user->patient_id ?: Patient::generatePlaceholderId());
+        if ($isStudentRole || $user->patient_id) {
+            $patientId = $studentId ?: $user->patient_id;
             $patient = $originalPatient ?: Patient::firstOrNew(['patient_id' => $patientId]);
             if ($studentId && $patient->exists && $studentId !== $patient->patient_id) {
                 $patient->renamePatientId($studentId);
@@ -183,6 +201,7 @@ class UserController extends Controller
             if ($middleName !== null) $patient->middle_name = $middleName;
             if ($lastName !== null) $patient->last_name = $lastName;
             if (array_key_exists('age', $validated)) $patient->age = $validated['age'];
+            if (array_key_exists('sex', $validated)) $patient->sex = $validated['sex'] === 'Others' ? 'Other' : $validated['sex'];
             $course = $validated['course'] ?? $validated['courseDept'] ?? $validated['course_dept'] ?? null;
             if ($course !== null) $patient->course_dept = $course;
             if (array_key_exists('block', $validated)) $patient->block = $validated['block'];
@@ -198,7 +217,6 @@ class UserController extends Controller
                 $patient->emergency_contact = trim(($emergName ?? '') . ($emergPhone ? " ({$emergPhone})" : ''));
             }
             $patient->save();
-            $patient->ensureMedicalRecord();
 
             if ($user->patient_id !== $patient->patient_id) {
                 $user->update(['patient_id' => $patient->patient_id]);
@@ -270,6 +288,17 @@ class UserController extends Controller
         }
         if ($this->isAdminRoleId($request->validated('role_id'))) {
             return $this->singleAdminResponse();
+        }
+
+        $targetRole = Role::findOrFail($request->validated('role_id'));
+        if ($user->isPatientUser() !== in_array($targetRole->name, User::PATIENT_ROLES, true)) {
+            return response()->json([
+                'message' => 'Roles can only be changed within the same user category. Student/patient accounts cannot become staff accounts, and staff accounts cannot become student/patient accounts.',
+                'errors' => ['role_id' => ['Select a role from the account\'s existing user category.']],
+            ], 422);
+        }
+        if ($user->role_id === $targetRole->id) {
+            return new UserResource($user->load('role'));
         }
 
         $previous = $this->roleLabel($user);

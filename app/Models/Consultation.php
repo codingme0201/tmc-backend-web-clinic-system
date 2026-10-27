@@ -16,6 +16,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 ])]
 class Consultation extends Model
 {
+    /** Clinical services, including those on existing consultations. */
+    public const TYPES = [
+        'General Check-up', 'Follow-up Consultation', 'Other', 'Check-up', 'Dental concern', 'Follow-up', 'Fever', 'Vaccination', 'Emergency',
+    ];
+
     /**
      * Consultation lifecycle statuses, matching the existing frontend exactly.
      */
@@ -63,6 +68,16 @@ class Consultation extends Model
     public function appointment(): BelongsTo
     {
         return $this->belongsTo(Appointment::class, 'appointment_id');
+    }
+
+    /** A clinical visit must belong to the same patient and be checked in. */
+    public function hasCheckedInVisit(): bool
+    {
+        $appointment = $this->appointment;
+
+        return $appointment && $appointment->checked_in_at !== null
+            && $this->patient_id && $appointment->patient_id === $this->patient_id
+            && in_array($appointment->status, ['Approved', 'Completed'], true);
     }
 
     public function staffUser(): BelongsTo

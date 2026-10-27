@@ -13,12 +13,13 @@ use Illuminate\Validation\Validator;
 class UpdateStaffProfileRequest extends FormRequest
 {
     /**
-     * Only doctors and nurses edit a profile, and only their own (through
+     * Doctors, nurses and front desk staff edit only their own profile (through
      * /me/staff-profile) — administrators can view and verify, not edit.
      */
     public function authorize(): bool
     {
-        return in_array($this->user()?->role?->name, User::PROFILE_SELF_EDIT_ROLES, true);
+        return in_array($this->user()?->role?->name, User::CLINIC_STAFF_ROLES, true)
+            && (! $this->has('user_id') || (int) $this->input('user_id') === $this->user()->id);
     }
 
     /**

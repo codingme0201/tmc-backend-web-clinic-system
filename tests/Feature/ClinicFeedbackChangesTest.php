@@ -59,7 +59,7 @@ class ClinicFeedbackChangesTest extends TestCase
 
     // --- Staff profiles ------------------------------------------------------------------------
 
-    public function test_only_the_doctor_or_nurse_can_edit_their_own_profile(): void
+    public function test_clinic_staff_can_edit_only_their_own_profile(): void
     {
         $doctor = $this->userWithRole('doctor');
         $admin = $this->userWithRole('admin', ['users.update', 'schedules.view']);
@@ -76,7 +76,7 @@ class ClinicFeedbackChangesTest extends TestCase
             ->assertNotFound();
         $this->actingAs($frontDesk, 'sanctum')
             ->putJson('/api/me/staff-profile', ['position' => 'Desk'])
-            ->assertForbidden();
+            ->assertOk()->assertJsonPath('data.position', 'Desk');
 
         $this->assertSame('MD, 10 years in school health.', $doctor->staffProfile()->value('background'));
     }
@@ -97,6 +97,29 @@ class ClinicFeedbackChangesTest extends TestCase
         $this->getJson("/api/me/clinic-staff/{$doctor->id}")->assertOk()->assertJsonPath('data.specialty', 'Pediatrics');
         $this->getJson("/api/me/clinic-staff/{$frontDesk->id}")->assertNotFound();
         $this->putJson('/api/me/staff-profile', ['background' => 'x'])->assertForbidden();
+    }
+
+    public function test_front_desk_cannot_edit_other_accounts_even_with_stale_management_permissions(): void
+    {
+        $frontDesk = $this->userWithRole('front_desk', ['users.update', 'users.delete', 'users.create', 'schedules.view']);
+        $other = $this->userWithRole('nurse');
+        $other->staffProfile()->create(['position' => 'School Nurse', 'background' => 'Original background']);
+        $originalPassword = $other->password;
+        $this->actingAs($frontDesk, 'sanctum');
+        $this->putJson('/api/me/staff-profile', ['position' => 'Reception', 'background' => 'My background', 'contactNumber' => '0917-123-4567'])
+            ->assertOk()->assertJsonPath('data.position', 'Reception')->assertJsonPath('data.background', 'My background');
+        $this->putJson('/api/me/staff-profile', ['user_id' => $other->id, 'background' => 'Changed'])
+            ->assertForbidden();
+        $this->putJson('/api/users/'.$other->id, ['name' => 'Changed'])->assertForbidden();
+        $this->patchJson('/api/users/'.$other->id.'/status', ['status' => 'inactive'])->assertForbidden();
+        $this->patchJson('/api/users/'.$other->id.'/role', ['role_id' => $frontDesk->role_id])->assertForbidden();
+        $this->postJson('/api/users/'.$other->id.'/reset-password', [])->assertForbidden();
+        $this->postJson('/api/clinic-staff/'.$other->id.'/verify', ['status' => 'Verified'])->assertForbidden();
+        $this->deleteJson('/api/users/'.$other->id)->assertForbidden();
+        $this->assertSame('Original background', $other->staffProfile()->value('background'));
+        $this->assertSame($originalPassword, $other->fresh()->password);
+        $this->assertSame('active', $other->fresh()->status);
+        $this->assertSame('My background', $frontDesk->staffProfile()->value('background'));
     }
 
     // --- Consultations -------------------------------------------------------------------------
@@ -173,6 +196,100 @@ class ClinicFeedbackChangesTest extends TestCase
     }
 
     // --- Medical records -----------------------------------------------------------------------
+
+    public function test_patient_status_changes_are_shared_by_registry_views_and_live_sync(): void
+    {
+        $patient = Patient::factory()->create(['status' => 'Active']);
+        $this->actingAs($this->userWithRole('admin', ['patients.view', 'patients.update']), 'sanctum');
+
+        foreach (['Inactive', 'Active'] as $status) {
+            $before = $this->getJson('/api/sync')->assertOk()->json('data.patients');
+            $this->patchJson("/api/patients/{$patient->id}/status", ['status' => $status])->assertOk()
+                ->assertJsonPath('data.id', $patient->id)
+                ->assertJsonPath('data.status', $status);
+            $this->getJson('/api/patients')->assertOk()
+                ->assertJsonFragment(['id' => $patient->id, 'status' => $status]);
+            $this->getJson("/api/patients/{$patient->id}")->assertOk()
+                ->assertJsonPath('data.status', $status);
+            $this->assertNotSame($before, $this->getJson('/api/sync')->assertOk()->json('data.patients'));
+            $this->assertDatabaseHas('patients', ['id' => $patient->id, 'status' => $status]);
+        }
+    }
+
+    public function test_patient_registry_exposes_registration_dates_without_using_last_update_dates(): void
+    {
+        $this->travelTo(now()->setDate(2026, 10, 22)->setTime(10, 0));
+        $this->actingAs($this->userWithRole('admin', ['patients.create', 'patients.view', 'patients.update']), 'sanctum');
+        $oldPatient = Patient::factory()->create([
+            'created_at' => now()->subDays(7),
+            'updated_at' => now(),
+        ]);
+
+        $this->getJson("/api/patients/{$oldPatient->id}")->assertOk()
+            ->assertJsonPath('data.registeredOn', '2026-10-15');
+        $this->putJson("/api/patients/{$oldPatient->id}", ['name' => 'Updated Older Patient'])->assertOk()
+            ->assertJsonPath('data.registeredOn', '2026-10-15');
+        $newId = $this->postJson('/api/patients', ['id' => '26-000001', 'name' => 'New Patient Today'])->assertCreated()
+            ->assertJsonPath('data.registeredOn', '2026-10-22')->json('data.id');
+        $this->getJson('/api/patients')->assertOk()
+            ->assertJsonFragment(['id' => $oldPatient->id, 'registeredOn' => '2026-10-15'])
+            ->assertJsonFragment(['id' => $newId, 'registeredOn' => '2026-10-22']);
+    }
+
+    public function test_registry_creation_saves_age_and_keeps_related_profiles_in_sync(): void
+    {
+        $admin = $this->userWithRole('admin', ['patients.create', 'patients.view', 'patients.update', 'medical_records.view']);
+        $this->actingAs($admin, 'sanctum');
+        $id = $this->postJson('/api/patients', [
+            'id' => '24-000020', 'name' => 'Registry Student', 'type' => 'Student', 'age' => '20', 'sex' => 'Female',
+        ])->assertCreated()->assertJsonPath('data.age', 20)->assertJsonPath('data.sex', 'Female')->json('data.id');
+
+        $this->assertDatabaseHas('patients', ['id' => $id, 'age' => 20]);
+        $this->assertDatabaseMissing('medical_records', ['patient_id' => '24-000020']);
+        Patient::findOrFail($id)->ensureMedicalRecord(); // Existing clinical record fixture for demographic sync.
+        $this->assertDatabaseHas('medical_records', ['patient_id' => '24-000020', 'age' => 20, 'sex' => 'Female']);
+        $this->getJson("/api/patients/{$id}")->assertOk()->assertJsonPath('data.age', 20);
+        $this->getJson("/api/patients/{$id}/medical-information")->assertOk()->assertJsonPath('data.age', 20);
+        $this->getJson('/api/medical-records')->assertOk()
+            ->assertJsonPath('data.0.age', 20)->assertJsonPath('data.0.studentProfile.age', 20)
+            ->assertJsonPath('data.0.sex', 'Female')->assertJsonPath('data.0.studentProfile.sex', 'Female');
+
+        $this->putJson("/api/patients/{$id}", ['age' => 21, 'sex' => 'Other'])->assertOk()->assertJsonPath('data.age', 21);
+        $this->assertDatabaseHas('medical_records', ['patient_id' => '24-000020', 'age' => 21, 'sex' => 'Other']);
+        $this->getJson('/api/medical-records')->assertOk()
+            ->assertJsonPath('data.0.age', 21)->assertJsonPath('data.0.studentProfile.age', 21);
+
+        $student = $this->userWithRole('student', [], ['patient_id' => '24-000020']);
+        $this->actingAs($student, 'sanctum');
+        $this->getJson('/api/me/profile')->assertOk()->assertJsonPath('data.age', 21)->assertJsonPath('data.sex', 'Other');
+        $this->getJson('/api/me/medical-records')->assertOk()->assertJsonPath('data.age', 21)->assertJsonPath('data.sex', 'Other');
+    }
+
+    public function test_registry_type_is_student_and_sex_uses_the_dropdown_values(): void
+    {
+        $this->actingAs($this->userWithRole('admin', ['patients.create']), 'sanctum');
+        $this->postJson('/api/patients', ['name' => 'Invalid Type', 'type' => 'Employee'])
+            ->assertUnprocessable()->assertJsonValidationErrors(['type']);
+        $this->postJson('/api/patients', ['name' => 'Invalid Sex', 'sex' => 'Invalid'])
+            ->assertUnprocessable()->assertJsonValidationErrors(['sex']);
+        foreach (['Female', 'Male', 'Other'] as $index => $sex) {
+            $this->postJson('/api/patients', ['id' => '26-00000'.$index, 'name' => "Student {$sex}", 'sex' => $sex])
+                ->assertCreated()->assertJsonPath('data.type', 'Student')->assertJsonPath('data.sex', $sex);
+        }
+    }
+
+    public function test_registry_creation_validates_age_and_allows_it_to_be_left_blank(): void
+    {
+        $this->actingAs($this->userWithRole('admin', ['patients.create']), 'sanctum');
+        $payload = ['id' => '26-000001', 'name' => 'Age Validation', 'type' => 'Student'];
+        foreach (['twenty', '20.5', 0, -1, 121] as $age) {
+            $this->postJson('/api/patients', [...$payload, 'age' => $age])
+                ->assertUnprocessable()->assertJsonValidationErrors(['age']);
+        }
+        $this->assertDatabaseCount('patients', 0);
+        $this->postJson('/api/patients', [...$payload, 'age' => null])
+            ->assertCreated()->assertJsonPath('data.age', null);
+    }
 
     public function test_medical_record_shows_the_age_and_details_the_student_entered(): void
     {

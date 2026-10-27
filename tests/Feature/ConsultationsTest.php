@@ -78,6 +78,30 @@ class ConsultationsTest extends TestCase
         ], $overrides));
     }
 
+    public function test_clinical_record_saves_and_displays_both_available_consultation_types(): void
+    {
+        $this->actingAsUser($this->adminUser());
+
+        foreach (['General Check-up', 'Follow-up Consultation'] as $type) {
+            $visitType = $type === 'Follow-up Consultation' ? 'Follow-up Consultation' : 'New Consultation';
+            $id = $this->postJson('/api/consultations', [
+                'patient' => 'Clinical Record Patient',
+                'type' => $type,
+                'visit_type' => 'New Consultation',
+                'date' => now()->addDay()->toDateString(),
+                'time' => '09:00 AM',
+                'status' => 'Scheduled',
+            ])->assertCreated()
+                ->assertJsonPath('data.type', $type)
+                ->assertJsonPath('data.visitType', $visitType)
+                ->json('data.id');
+
+            $this->assertDatabaseHas('consultations', ['id' => $id, 'type' => $type, 'visit_type' => $visitType]);
+            $this->getJson("/api/consultations/{$id}")->assertOk()->assertJsonPath('data.type', $type);
+            $this->getJson('/api/consultations')->assertOk()->assertJsonFragment(['id' => $id, 'type' => $type]);
+        }
+    }
+
     // --- Authentication boundary -------------------------------------------
 
     public function test_consultation_endpoints_require_authentication(): void
@@ -151,6 +175,27 @@ class ConsultationsTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.reference', 'CONS-2026-300')
             ->assertJsonPath('data.diagnosis', 'Tension Headache');
+    }
+
+    public function test_list_shows_newest_records_first_regardless_of_status_or_visit_date(): void
+    {
+        $this->actingAsUser($this->adminUser());
+        $this->travelTo(now()->setDate(2026, 8, 2)->setTime(8, 0));
+        $newer = $this->makeConsultation([
+            'date' => '2026-08-15', 'status' => 'Completed',
+        ]);
+        $latest = $this->makeConsultation([
+            'date' => '2026-08-10', 'status' => 'Scheduled',
+        ]);
+        $this->travelTo(now()->setDate(2026, 8, 1));
+        $older = $this->makeConsultation([
+            'date' => '2026-08-20', 'status' => 'In Progress',
+        ]);
+
+        $this->getJson('/api/consultations')->assertOk()
+            ->assertJsonPath('data.0.id', $latest->id)
+            ->assertJsonPath('data.1.id', $newer->id)
+            ->assertJsonPath('data.2.id', $older->id);
     }
 
     // --- Create (log) ------------------------------------------------------

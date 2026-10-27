@@ -54,7 +54,7 @@ class ClinicStaffController extends Controller
     }
 
     /**
-     * A doctor/nurse submits or updates their own background and credentials.
+     * Clinic staff update their own profile; doctors and nurses also submit credentials.
      * Nobody else (including administrators) can edit these profiles.
      */
     public function updateMine(UpdateStaffProfileRequest $request): ClinicStaffResource
@@ -71,6 +71,7 @@ class ClinicStaffController extends Controller
      */
     public function publicIndex(): JsonResponse
     {
+        app(\App\Services\WeeklyScheduleService::class)->ensureRange(now()->toDateString(), now()->addDays(30)->toDateString());
         $staff = User::with(['role', 'staffProfile', 'staffSchedules' => fn ($q) => $q
             ->where('status', 'Available')
             ->whereBetween('date', [now()->toDateString(), now()->addDays(30)->toDateString()])
@@ -87,6 +88,7 @@ class ClinicStaffController extends Controller
 
     public function publicShow(User $user): JsonResponse
     {
+        app(\App\Services\WeeklyScheduleService::class)->ensureRange(now()->toDateString(), now()->addDays(30)->toDateString(), $user->id);
         $user->loadMissing(['role', 'staffProfile']);
         if ($user->status !== 'active' || $user->isCredentialRejected() || ! in_array($user->role?->name, User::PROFILE_SELF_EDIT_ROLES, true)) {
             abort(404, 'Medical staff member not found.');
@@ -116,6 +118,7 @@ class ClinicStaffController extends Controller
             'specialty' => $profile?->specialization ?: ($user->role?->name === 'nurse' ? 'Nursing Services' : 'General Medicine'),
             'specialization' => $profile?->specialization ?? '',
             'department' => $user->clinicalDepartment(),
+            'status' => app(\App\Services\AppointmentScheduler::class)->currentStaffStatus($user),
             'background' => $profile?->background ?? '',
             'contactNumber' => $profile?->contact_number ?? '',
             'email' => $user->email,
@@ -213,6 +216,7 @@ class ClinicStaffController extends Controller
     private function loadDetail(User $user): User
     {
         $today = now()->toDateString();
+        app(\App\Services\WeeklyScheduleService::class)->ensureRange($today, now()->addDays(14)->toDateString(), $user->id);
 
         return $user->load([
             'role',

@@ -64,7 +64,7 @@ class ConsultationController extends Controller
             $query->where('patient_id', $patientId);
         }
 
-        return ConsultationResource::collection($this->newestFirst($query->get()));
+        return ConsultationResource::collection($query->orderByDesc('created_at')->orderByDesc('id')->get());
     }
 
     /**
@@ -160,9 +160,11 @@ class ConsultationController extends Controller
         $staffName = $staffUser?->name ?? ($validated['staff'] ?? ($appointment?->staff ?? ''));
 
         $previousId = $validated['previous_consultation_id'] ?? $appointment?->previous_consultation_id;
-        $visitType = $validated['visit_type']
-            ?? $appointment?->visit_type
-            ?? ($previousId ? Appointment::VISIT_FOLLOW_UP : Appointment::VISIT_NEW);
+        $visitType = Appointment::resolveVisitType(
+            $validated['visit_type'] ?? $appointment?->visit_type,
+            $type,
+            $previousId,
+        );
 
         $consultation = DB::transaction(function () use ($validated, $today, $nowTime, $vitals, $status, $staffUser, $staffName, $appointment, $previousId, $visitType, $type) {
             $patientId = $validated['patient_id'] ?? $appointment?->patient_id ?? Patient::where('name', $validated['patient'])->value('patient_id');
@@ -292,6 +294,16 @@ class ConsultationController extends Controller
         }
 
         DB::transaction(function () use ($consultation, $validated, $followUpRequired, $staffAttributes, $request) {
+            $consultation = Consultation::whereKey($consultation->id)->lockForUpdate()->firstOrFail();
+            abort_unless($consultation->status === 'In Progress', 409, 'Only in-progress consultations can be completed.');
+            if ($consultation->appointment_id) {
+                $appointment = Appointment::whereKey($consultation->appointment_id)->lockForUpdate()->first();
+                $consultation->setRelation('appointment', $appointment);
+                if (! $consultation->hasCheckedInVisit()) {
+                    throw \Illuminate\Validation\ValidationException::withMessages(['appointment' => ['Check in the patient for an approved appointment before completing the consultation.']]);
+                }
+                $appointment->ensureAccessibleBy($request->user());
+            }
             $consultation->update([
                 ...$staffAttributes,
                 'chief_complaint' => $validated['chiefComplaint'],
@@ -422,7 +434,7 @@ class ConsultationController extends Controller
     private function completeLinkedAppointment(Consultation $consultation): void
     {
         $appointment = $consultation->appointment;
-        if ($appointment && $appointment->canTransitionTo('Completed')) {
+        if ($consultation->hasCheckedInVisit() && $appointment->canTransitionTo('Completed')) {
             $appointment->update(['status' => 'Completed']);
         }
     }
@@ -505,7 +517,7 @@ class ConsultationController extends Controller
      */
     private function recordInMedicalHistory(Consultation $consultation): void
     {
-        if (! $consultation->patient_id) {
+        if ($consultation->status !== 'Completed' || ! $consultation->hasCheckedInVisit()) {
             return;
         }
 

@@ -3,6 +3,7 @@
 use App\Http\Controllers\AcademicProgramController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\AppointmentController;
+use App\Http\Controllers\AppointmentCalendarController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ClinicInsightsController;
 use App\Http\Controllers\ClinicStaffController;
@@ -68,8 +69,12 @@ Route::post('/register', [AuthController::class, 'register'])->middleware('throt
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:login');
 Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:login');
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', \App\Http\Middleware\RefreshAppointmentStatuses::class])->group(function () {
     Route::get('/user', [AuthController::class, 'user']);
+    Route::get('/profile-pictures/{user}', [\App\Http\Controllers\ProfilePictureController::class, 'show'])->middleware('staff.user');
+    Route::post('/me/profile-picture', [\App\Http\Controllers\ProfilePictureController::class, 'store'])->middleware('staff.user');
+    Route::delete('/me/profile-picture', [\App\Http\Controllers\ProfilePictureController::class, 'destroy'])->middleware('staff.user');
+    Route::get('/appointment-calendar', [AppointmentCalendarController::class, 'index']);
     // Live sync — opaque per-module change versions polled by the web system
     // and the mobile app (no data, so any signed-in user may read it).
     Route::get('/sync', [SyncController::class, 'index']);
@@ -120,10 +125,14 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Staff roster (dashboard duty schedule)
     Route::get('/staff', [StaffController::class, 'index'])->middleware('permission:schedules.view');
-    Route::patch('/staff/status', [StaffController::class, 'updateStatus'])->middleware('permission:schedules.update');
+    Route::patch('/staff/status', [StaffController::class, 'updateStatus'])->middleware(['admin', 'permission:schedules.update']);
 
     // Staff schedules (Module 8 — Doctor/Nurse Schedule)
+    Route::get('/weekly-staff-schedules', [\App\Http\Controllers\WeeklyStaffScheduleController::class, 'index'])->middleware('permission:schedules.view');
+    Route::post('/weekly-staff-schedules', [\App\Http\Controllers\WeeklyStaffScheduleController::class, 'store'])->middleware('permission:schedules.create');
     Route::get('/staff-schedules/eligible-staff', [StaffScheduleController::class, 'eligibleStaff'])->middleware('permission:schedules.view');
+    Route::get('/staff-schedules/staff', [\App\Http\Controllers\StaffScheduleDirectoryController::class, 'index'])->middleware('permission:schedules.view');
+    Route::get('/staff-schedules/staff/{user}', [\App\Http\Controllers\StaffScheduleDirectoryController::class, 'show'])->middleware('permission:schedules.view');
     Route::get('/staff-schedules', [StaffScheduleController::class, 'index'])->middleware('permission:schedules.view');
     Route::get('/staff-schedules/{schedule}', [StaffScheduleController::class, 'show'])->middleware('permission:schedules.view');
     Route::post('/staff-schedules', [StaffScheduleController::class, 'store'])->middleware('permission:schedules.create');
